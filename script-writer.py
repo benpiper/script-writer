@@ -16,12 +16,12 @@ llm = ChatOpenAI(model="gpt-5-nano", temperature=1,
 ideation_prompt_template_text = """
         I want to create YouTube videos covering hands-on AI and LLM development and theory.
         Provide an idea for a video I can record and publish quickly.
-        Keep the videos simple and accessible.
-        Videos should be less than {max_minutes} minutes.
-        Be sure that that title, tools, and learning objectives reflect content or hands-on activities that can be covered and completed in {max_minutes} minutes or less.
-        Err on the side of covering too little rather than covering too much.
-        Avoid overdone topics such as chatbots.
-        Be decisive. Do not use "or" in the list of tools or learning objectives.
+        - Keep the videos simple and accessible.
+        - Videos should be less than {max_minutes} minutes. Do not include the time estimate in the title.
+        - Be sure that that title, tools, and learning objectives reflect content or hands-on activities that can be covered and completed in {max_minutes} minutes or less.
+        - Err on the side of covering too little rather than covering too much.
+        - Avoid overdone topics such as chatbots.
+        - Be decisive. Do not use "or" in the list of tools or learning objectives.
 
         # Output Format
         Return your answer as valid JSON using the following format:
@@ -70,12 +70,13 @@ OUTLINE_PROMPT_TEMPLATE = """
 
           {{
                 "title": "{title}",
-                "tools": "{tools}",
+                "tools": {tools},
                 "learning_objectives": {learning_objectives}
           }},
 
         - Do not exceed the scope as defined by the title, tools, and learning objectives.
         - Do not include self-paced exercises. All demonstrations will be done in the video.
+        - Do not use Google Colab
         - Think deeply about the outline and be absolutely sure it covers but does not exceed what the title promises.
         - Ensure the outline follows a logical sequence.
         - In the final section, do not include next steps or additional resources.
@@ -128,8 +129,11 @@ SCRIPT_PROMPT_TEMPLATE_TEXT = """
 
     Requirements:
     - Keep the output concise but complete for this section.
-    - Ensure tone and formatting are consistent with previous sections.
+    - Ensure tone, formatting, and facts are consistent with previous sections.
     - Do not include next steps or external resources in this section.
+    - Do not repeat explanations or definitions.
+    - Do not reiterate the learning objectives in the final section
+    - Do not include a recap
     - Return ONLY the script content for this section as a JSON object:
     {{
     "section_name": "{name}",
