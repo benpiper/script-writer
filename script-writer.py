@@ -6,7 +6,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("script_writer")
 
 llm = ChatOpenAI(model="gpt-5-nano", temperature=1,
@@ -38,15 +38,6 @@ IDEATION_PROMPT_TEMPLATE_TEXT = """
         - Output Constraints:
         - Only return a single JSON object per response.
 
-        - Example
-
-
-            {{
-                "title": "Lightning Labs: Build a Tiny LLM Agent in 20 Minutes (Hands-On for IT Pros)",
-                "tools": ["Python", "OpenAI API", "VS Code"],
-                "learning_objectives": ["learn basic prompt design and chaining", "Understand the end-to-end flow of a small language-model-powered agent"]
-            }},
-
           After generating the output, review it to ensure all requirements and formatting constraints are fulfilled.
           If validation fails, self-correct and return the correct JSON error object.
         """
@@ -60,7 +51,7 @@ video_idea_chain = IDEATION_PROMPT_TEMPLATE | llm | StrOutputParser()
 # logger.info(video_idea_chain)
 
 # Invoke the ideation chain
-MAX_MINUTES = 20
+MAX_MINUTES = 30
 TOPIC = "hands-on AI and LLM development and theory."
 LEVEL = "Beginner"
 video_idea = video_idea_chain.invoke(
@@ -85,7 +76,7 @@ OUTLINE_PROMPT_TEMPLATE = """
             "learning_objectives": {learning_objectives}
         }}
         ```
-         
+
         Guidelines:
         - Stay strictly within the scope defined by the title, tools, and learning objectives.
         - Exclude self-paced exercises; all demonstrations should be incorporated within the video outline.
@@ -134,12 +125,14 @@ outline = outline_chain.invoke(video_idea_json)
 # Convert result to JSON
 outline_json = json.loads(outline)
 logger.info("Outline JSON:")
-logger.info(outline_json)
+# logger.info(outline_json)
 
 # --- Script generation logic ---
 # Iterate through the outline
 # Generate markdown from first section
 # Subsequent sections, generate markdown from second section plus script so far
+
+time.sleep(1)
 
 # --- Prompt: Generate script ---
 
@@ -151,18 +144,22 @@ SCRIPT_PROMPT_TEMPLATE_TEXT = """
     - Section title: {name}
     - Section content: {content}
 
-    You will add your result to the following script, ensuring it is consistent and complete:
+    Requirements:
+    - Include prerequisites in the first section
+    - Use clear, consistent headings for each major step
+    - Write for clarity and readability
+    - Make the output concise yet thorough for this section.
+    - Ensure all content is recent and up-to-date
+    - Match the tone, formatting, and factual consistency of preceding sections.
+    - Exclude next steps from this section.
+    - Do not repeat explanations, definitions, headings, or learning objectives.
+    - Do not include a recap, wrap-up, or summary.
+
+    You will add your result to the following script:
     # START OF SCRIPT
     {script_so_far}
     # END OF SCRIPT
 
-    Requirements:
-    - Make the output concise yet thorough for this section.
-    - Match the tone, formatting, and factual consistency of preceding sections.
-    - Exclude next steps and external resources from this section.
-    - Do not repeat explanations, definitions, or learning objectives.
-    - Do not include a recap, wrap-up, or summary.
-    
     ## Output Format
     Return ONLY the script content for this section as a JSON object:
     {{
@@ -220,11 +217,80 @@ for section in outline_json["sections"]:
 # Final combined script markdown
 final_script_markdown = "\n\n".join(accumulated_script_markdown_parts)
 logger.info("Final script generated.")
-#logger.info(final_script_markdown)
+# logger.info(final_script_markdown)
 
+time.sleep(1)
 
-# write to file
+# write script to file
+logger.info("Writing script to file")
 timestamp = int(time.time())
-filename = f"video_script_{timestamp}.md"
-with open(filename, "w", encoding="utf-8") as f:
+script_filename = f"video_script_{timestamp}.md"
+with open(script_filename, "w", encoding="utf-8") as f:
     f.write(final_script_markdown)
+
+# write outline to file
+logger.info("Writing outline to file")
+outline_filename = f"video_outline_{timestamp}.json"
+with open(outline_filename, "w", encoding="utf-8") as f:
+    f.write(json.dumps(outline_json))
+
+logger.info("Starting script QA")
+
+QA_PROMPT_TEMPLATE_TEXT = """
+    You are an expert content reviewer.
+    Analyze the provided content for accuracy, logical consistency, clarity, completeness, tone, and style.
+    Produce a concise, actionable report with the following sections:
+
+    - Summary (one short paragraph): state the content’s main claim or purpose and overall quality judgment (accurate/inaccurate, consistent/inconsistent, clear/unclear).
+
+    - Correctness: identify factual errors, misleading statements, or unsupported claims. For each issue include:
+      - the exact excerpt (quote)
+      - why it is incorrect or unsupported (brief explanation)
+      - recommended correction (one-line factual fix or citation to a source)
+
+    - Consistency: identify internal contradictions, mismatched terminology, or logical gaps. For each issue include:
+       - the conflicting excerpts (quote both)
+       - explanation of the inconsistency
+       - recommended change to resolve it
+
+    - Clarity and Readability: note sentences or sections that are confusing, verbose, or jargon-heavy. For each item include:
+       - the excerpt
+       - a one-line plain-language rewrite
+
+    - Completeness and Structure: list missing points, unanswered questions, or structural problems (e.g., poor flow, missing headings). For each item include:
+        - the missing element or structural issue
+        - a brief suggestion on where to add it and what to include
+
+    - Tone and Audience Fit: state whether tone matches the intended audience and suggest adjustments (one-line suggestions).
+    - Priority Level: assign each suggested change a priority (High/Medium/Low).
+    - Final Recommendation: one short paragraph stating whether content is ready, needs minor edits, or requires major revision.
+
+    Formatting requirements for your response:
+       - Use Markdown headings for each numbered section above (e.g., "### 1. Summary").
+       - Under sections 2–6, present all suggestions as Markdown bullet lists.
+       - For every bullet, include a Priority label in bold at the start (e.g., High:).
+       - Keep the entire report under 800 words.
+
+    Begin the analysis now; assume the intended audience is {level} level.
+
+    ## Input
+    {content}
+"""
+
+QA_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
+    QA_PROMPT_TEMPLATE_TEXT)
+
+# --- Construct the script QA chain ---
+script_qa_chain = (
+    QA_PROMPT_TEMPLATE
+    | llm
+    | StrOutputParser()
+)
+
+script_qa_response = script_qa_chain.invoke(
+    {"level": LEVEL, "content": final_script_markdown})
+
+# write script QA report to file
+script_qa_filename = f"video_script_qa_{timestamp}.md"
+with open(script_qa_filename, "w", encoding="utf-8") as f:
+    f.write(script_qa_response)
