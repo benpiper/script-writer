@@ -74,20 +74,24 @@ logger.info(video_idea_json)
 # --- Prompt: Generate Outline ---
 
 OUTLINE_PROMPT_TEMPLATE = """
-        You will create a detailed outline for the following video.
+        Begin with a concise checklist (3-7 bullets) of the main planning and sequencing steps you will follow before creating the outline.
+        Create a comprehensive outline for the specified video using the structured input provided.
+
+        Input JSON structure:
 
           {{
                 "title": "{title}",
                 "tools": {tools},
                 "learning_objectives": {learning_objectives}
           }},
-
-        - Do not exceed the scope as defined by the title, tools, and learning objectives.
-        - Do not include self-paced exercises. All demonstrations will be done in the video.
-        - Do not use Google Colab
-        - Think deeply about the outline and be absolutely sure it covers but does not exceed what the title promises.
-        - Ensure the outline follows a logical sequence.
-        - In the final section, do not include next steps or additional resources.
+         
+        Guidelines:
+        - Stay strictly within the scope defined by the title, tools, and learning objectives.
+        - Exclude self-paced exercises; all demonstrations should be incorporated within the video outline.
+        - Do not incorporate Google Colab in examples or demonstrations.
+        - Carefully design the outline to ensure it fully addresses, but does not go beyond, the content indicated in the title.
+        - Arrange all sections and demonstration steps in a clear, logical sequence.
+        - For the final section, refrain from including next steps, recommendations, or external/additional resources.
 
         # Output Format
         Return your answer as JSON formatted as follows:
@@ -96,6 +100,9 @@ OUTLINE_PROMPT_TEMPLATE = """
                 {{ "name": "<string>", "content": []" }}
             ]
         }}
+
+        After outlining, validate that each section directly supports the provided title and learning objectives, and confirm that all demonstrations are video-based and in logical order.
+        If any guideline is not fully met, correct the outline before producing your final output.
 
         """
 
