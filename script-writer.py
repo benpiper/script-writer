@@ -106,9 +106,9 @@ OUTLINE_PROMPT_TEMPLATE = """
         - Return a JSON object structured as:
         ```
         {
-        "sections": [
-        { "name": "<string>", "content": [<string>, ...] }
-        ]
+            "sections": [
+            { "name": "<string>", "content": [<string>, ...] }
+            ]
         }
         ```
         - 'sections' should be an array of section objects.
@@ -144,24 +144,26 @@ logger.info(outline_json)
 # --- Prompt: Generate script ---
 
 SCRIPT_PROMPT_TEMPLATE_TEXT = """
-    You will write a detailed script based on the following section of an outline.
+    Begin with a concise checklist (3-7 bullets) of the steps to generate the script for the given section.
+    Validate required keys before composing the script.
+    Create a detailed, markdown-formatted script for a specific section using the following inputs:
 
     - Section title: {name}
     - Section content: {content}
 
-    You will add your result to the following script, ensuring it is consistent and complete:
+    Incorporate your response into the existing script between the START and END OF SCRIPT markers:
     # START OF SCRIPT
     {script_so_far}
     # END OF SCRIPT
 
     Requirements:
-    - Keep the output concise but complete for this section.
-    - Ensure tone, formatting, and facts are consistent with previous sections.
-    - Do not include next steps or external resources in this section.
-    - Do not repeat explanations or definitions.
-    - Do not reiterate the learning objectives in the final section
-    - Do not include a recap
-    - Return ONLY the script content for this section as a JSON object:
+    - Make the output concise yet thorough for this section.
+    - Match the tone, formatting, and factual consistency of earlier sections.
+    - Exclude next steps and external resources from this section.
+    - Do not repeat explanations, definitions, or learning objectives.
+    - Do not provide a recap in the script.
+    ## Output Format
+    Return ONLY the script content for this section as a JSON object:
     {{
     "section_name": "{name}",
     "script_markdown": "<string>"
