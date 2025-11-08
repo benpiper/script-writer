@@ -13,17 +13,20 @@ llm = ChatOpenAI(model="gpt-5-nano", temperature=1,
 
 # --- Prompt: Generate Video Idea ---
 
-ideation_prompt_template_text = """
-        I want to create YouTube videos covering hands-on AI and LLM development and theory.
-        Provide an idea for a video I can record and publish quickly.
-        - Keep the videos simple and accessible.
-        - Videos should be less than {max_minutes} minutes. Do not include the time estimate in the title.
-        - Be sure that that title, tools, and learning objectives reflect content or hands-on activities that can be covered and completed in {max_minutes} minutes or less.
-        - Err on the side of covering too little rather than covering too much.
-        - Avoid overdone topics such as chatbots.
-        - Be decisive. Do not use "or" in the list of tools or learning objectives.
+IDEATION_PROMPT_TEMPLATE_TEXT = """
+        Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
+        Generate an idea for a video that can be quickly recorded and published, guided by the following requirements:
+        - Inputs:
+        - Topic: {topic} (string)
+        - Level: {level} (string)
+        - Maximum Length: {max_minutes} (positive integer; video must be less than or equal to this number of minutes)
+        - Requirements:
+        - Do not include or mention time estimates in the video title.
+        - The title, list of tools, and learning objectives must all be achievable within {max_minutes} minutes.
+        - The video idea should avoid generic or overly common topics (e.g., chatbots).
+        - Be specific and decisive in output: Do not use "or" in the lists of tools or learning objectives.
 
-        # Output Format
+        - Output Format
         Return your answer as valid JSON using the following format:
 
             {{
@@ -32,11 +35,11 @@ ideation_prompt_template_text = """
                 "learning_objectives": ["Learning objective 1", "Learning objective 2"]
             }}
 
-        Return a maximum of 1 JSON object.
+        - Output Constraints:
+        - Only return a single JSON object per response.
 
-        # Example
+        - Example
 
-        The following is an example output:
 
             {{
                 "title": "Lightning Labs: Build a Tiny LLM Agent in 20 Minutes (Hands-On for IT Pros)",
@@ -44,19 +47,24 @@ ideation_prompt_template_text = """
                 "learning_objectives": ["learn basic prompt design and chaining", "Understand the end-to-end flow of a small language-model-powered agent"]
             }},
 
+          After generating the output, review it to ensure all requirements and formatting constraints are fulfilled.
+          If validation fails, self-correct and return the correct JSON error object.
         """
 
-ideation_prompt_template = ChatPromptTemplate.from_template(
-    ideation_prompt_template_text)
+IDEATION_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
+    IDEATION_PROMPT_TEMPLATE_TEXT)
 
 # Construct the ideation chain: prompt > LLM > string
-video_idea_chain = ideation_prompt_template | llm | StrOutputParser()
+video_idea_chain = IDEATION_PROMPT_TEMPLATE | llm | StrOutputParser()
 logger.info("Chain:")
 logger.info(video_idea_chain)
 
 # Invoke the ideation chain
-max_minutes = 30
-video_idea = video_idea_chain.invoke({"max_minutes": max_minutes})
+MAX_MINUTES = 30
+TOPIC = "hands-on AI, ML, or LLM development and theory."
+LEVEL = "Beginner"
+video_idea = video_idea_chain.invoke(
+    {"max_minutes": MAX_MINUTES, "topic": TOPIC, "level": LEVEL})
 
 # Convert result to JSON
 video_idea_json = json.loads(video_idea)
@@ -154,35 +162,36 @@ script_chain = (
 )
 
 # --- Run the outline Chain with first section only ---
-#script = script_chain.invoke(outline_json["sections"][0])
-#logger.info("Script:")
-#logger.info(script)
+# script = script_chain.invoke(outline_json["sections"][0])
+# logger.info("Script:")
+# logger.info(script)
 
 # Iterate through sections, accumulating script
 accumulated_script_markdown_parts = []
 all_section_scripts = []
 
 for section in outline_json["sections"]:
-        section_input = {
+    section_input = {
         "name": section.get("name", ""),
         "content": json.dumps(section.get("content", [])),
         "script_so_far": json.dumps(accumulated_script_markdown_parts)
     }
-        try:
-            raw_section_resp = script_chain.invoke(section_input)
-            section_obj = json.loads(raw_section_resp)
-            script_md = section_obj.get("script_markdown", "").strip()
-            if not script_md:
-                raise ValueError("Empty script returned for section.")
-        except Exception:
-            logger.exception("Error generating script for section: %s", section.get("name"))
-            raise
+    try:
+        raw_section_resp = script_chain.invoke(section_input)
+        section_obj = json.loads(raw_section_resp)
+        script_md = section_obj.get("script_markdown", "").strip()
+        if not script_md:
+            raise ValueError("Empty script returned for section.")
+    except Exception:
+        logger.exception(
+            "Error generating script for section: %s", section.get("name"))
+        raise
 
-        # Accumulate
-        logger.info("Script part generated:")
-        logger.info(script_md)
-        accumulated_script_markdown_parts.append(f"\n\n{script_md}")
-        all_section_scripts.append(section_obj)
+    # Accumulate
+    logger.info("Script part generated:")
+    logger.info(script_md)
+    accumulated_script_markdown_parts.append(f"\n\n{script_md}")
+    all_section_scripts.append(section_obj)
 
 # Final combined script markdown
 final_script_markdown = "\n\n".join(accumulated_script_markdown_parts)
