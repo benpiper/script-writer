@@ -78,12 +78,13 @@ OUTLINE_PROMPT_TEMPLATE = """
         Create a comprehensive outline for the specified video using the structured input provided.
 
         Input JSON structure:
-
-          {{
-                "title": "{title}",
-                "tools": {tools},
-                "learning_objectives": {learning_objectives}
-          }},
+        ```
+        {
+        "title": "<string>",
+        "tools": [<string>, ...],
+        "learning_objectives": [<string>, ...]
+        }
+        ```
          
         Guidelines:
         - Stay strictly within the scope defined by the title, tools, and learning objectives.
@@ -93,16 +94,27 @@ OUTLINE_PROMPT_TEMPLATE = """
         - Arrange all sections and demonstration steps in a clear, logical sequence.
         - For the final section, refrain from including next steps, recommendations, or external/additional resources.
 
-        # Output Format
-        Return your answer as JSON formatted as follows:
-        {{
-            "sections": [
-                {{ "name": "<string>", "content": []" }}
-            ]
-        }}
+        If 'title', 'tools', or 'learning_objectives' fields are missing or not the correct type, respond with the following JSON object:
+        ```
+        {"error": "Missing or invalid input fields."}
+        ```
 
         After outlining, validate that each section directly supports the provided title and learning objectives, and confirm that all demonstrations are video-based and in logical order.
         If any guideline is not fully met, correct the outline before producing your final output.
+
+        # Output Format
+        - Return a JSON object structured as:
+        ```
+        {
+        "sections": [
+        { "name": "<string>", "content": [<string>, ...] }
+        ]
+        }
+        ```
+        - 'sections' should be an array of section objects.
+        - Each section object includes:
+        - 'name': the title of the section (string)
+        - 'content': an array of strings detailing the main points, demonstration steps, or explanations.
 
         """
 
