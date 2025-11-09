@@ -42,6 +42,13 @@ IDEATION_PROMPT_TEMPLATE_TEXT = """
 
           After generating the output, review it to ensure all requirements and formatting constraints are fulfilled.
           If validation fails, self-correct and return the correct JSON error object.
+
+          - Example output
+            {{
+                "title": "How to write a Hello World program in Python",
+                "tools": ["Python", "VS Code"],
+                "learning_objectives": ["Write a program in Python", "Run a Python program", "Understand Python syntax"]
+            }}
         """
 
 IDEATION_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
@@ -54,7 +61,7 @@ video_idea_chain = IDEATION_PROMPT_TEMPLATE | llm | StrOutputParser()
 
 # Invoke the ideation chain
 MAX_MINUTES = 30
-TOPIC = "Understanding how AI and LLM works"
+TOPIC = "Creating a simple React app using vite and functional components"
 LEVEL = "Beginner"
 video_idea = video_idea_chain.invoke(
     {"max_minutes": MAX_MINUTES, "topic": TOPIC, "level": LEVEL})
@@ -198,6 +205,32 @@ all_section_scripts = []
 
 accumulated_script_markdown_parts.append(f"# {video_idea_json['title']}")
 
+# Safe json loading fx
+
+
+def safe_json_loads(text):
+    if not isinstance(text, str):
+        return None
+    try:
+        return json.loads(text)
+    except Exception:
+        # Try to extract a JSON object or array from the response
+        m = re.search(r'\{.*\}', text, re.S)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except Exception:
+                pass
+        m = re.search(r'\[.*\]', text, re.S)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except Exception:
+                pass
+        return None
+##
+
+
 for section in outline_json["sections"]:
     section_input = {
         "name": section.get("name", ""),
@@ -206,7 +239,8 @@ for section in outline_json["sections"]:
     }
     try:
         raw_section_resp = script_chain.invoke(section_input)
-        section_obj = json.loads(raw_section_resp)
+        #section_obj = json.loads(raw_section_resp)
+        section_obj = safe_json_loads(raw_section_resp)
         script_md = section_obj.get("script_markdown", "").strip()
         if not script_md:
             raise ValueError("Empty script returned for section.")
@@ -244,33 +278,22 @@ QA_PROMPT_TEMPLATE_TEXT = """
 
     - Summary (one short sentence): state the content’s main claim or purpose and overall quality judgment (accurate/inaccurate, consistent/inconsistent, clear/unclear).
 
-    - Correctness: identify major factual errors. For each issue include:
-      - the exact excerpt (quote)
-      - why it is incorrect (brief explanation)
-      - recommended correction (one-line factual fix or citation to a source)
+    - Correctness: identify major factual errors. For each issue include why it is incorrect (brief explanation).
 
-    - Consistency: identify internal contradictions, mismatched terminology, or logical gaps. For each issue include:
-       - the conflicting excerpts (quote both)
-       - explanation of the inconsistency
-       - recommended change to resolve it
+    - Consistency: identify internal contradictions, mismatched terminology, or logical gaps.
 
-    - Clarity and Readability: note sentences or sections that are confusing, verbose, or jargon-heavy. For each item include:
-       - the excerpt
-       - a one-line plain-language rewrite
+    - Clarity and Readability: note sentences or sections that are confusing, verbose, or jargon-heavy.
 
-    - Completeness and Structure: list missing points, unanswered questions, or structural problems (e.g., poor flow, missing headings). For each item include:
-        - the missing element or structural issue
-        - a brief suggestion on where to add it and what to include
+    - Completeness and Structure: list missing points, unanswered questions, or structural problems (e.g., poor flow, missing headings).
 
-    - Audience Fit: state whether content matches the intended audience and suggest adjustments (one-line suggestions).
+    - Audience Fit: state whether content matches the intended audience
     - Priority Level: assign each suggested change a priority (High/Medium/Low).
     - Final Recommendation: one sentence stating whether content is ready, needs minor edits, or requires major revision.
 
     Formatting requirements for your response:
        - Use Markdown headings for each numbered section above (e.g., "### 1. Summary").
-       - Under sections 2–6, present all suggestions as Markdown bullet lists.
+       - Under remaining sections, present all suggestions as Markdown bullet lists.
        - For every bullet, include a Priority label in bold at the start (e.g., High:).
-       - Keep the entire report under 800 words.
 
     Begin the analysis now on the following content:
 
