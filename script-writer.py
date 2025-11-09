@@ -134,7 +134,7 @@ timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 logger.info("Writing outline to file")
 outline_filename = f"video_outline_{timestamp}.json"
 with open(outline_filename, "w", encoding="utf-8") as f:
-    f.write(json.dumps(outline_json))
+    f.write(json.dumps(outline_json, indent=2, ensure_ascii=False))
 
 # --- Script generation logic ---
 # Iterate through the outline
@@ -157,7 +157,7 @@ SCRIPT_PROMPT_TEMPLATE_TEXT = """
     - Make the output concise yet thorough for this section.
     - Ensure all content is recent and up-to-date
     - Ensure the script you generate is consistent with the preceding sections in terms of tone, formatting, and flow
-    - Do not repeat explanations, definitions, headings, or learning objectives.
+    - Avoid unnecessary repetition
     - Do not include a recap, wrap-up, or summary.
     - Be detailed and ensure accurate, step-by-step instructions are included for hands-on demonstrations.
     - Ensure all code samples work and are syntactically correct and functional
@@ -213,6 +213,7 @@ for section in outline_json["sections"]:
     except Exception:
         logger.exception(
             "Error generating script for section: %s", section.get("name"))
+        logger.exception(raw_section_resp)
         raise
 
     # Accumulate
@@ -236,8 +237,9 @@ with open(script_filename, "w", encoding="utf-8") as f:
 logger.info("Starting script QA")
 
 QA_PROMPT_TEMPLATE_TEXT = """
-    You are an expert content reviewer.
-    Analyze the provided content for accuracy, logical consistency, clarity, completeness, tone, style, and audience appropriateness ({level} level).
+    Analyze the provided content for accuracy, relevance, logical consistency, clarity, completeness, tone, style, and audience appropriateness.
+    - Title: {title}
+    - Audience level: {level}
     Produce a concise, actionable report with the following sections:
 
     - Summary (one short sentence): state the content’s main claim or purpose and overall quality judgment (accurate/inaccurate, consistent/inconsistent, clear/unclear).
@@ -260,8 +262,8 @@ QA_PROMPT_TEMPLATE_TEXT = """
         - the missing element or structural issue
         - a brief suggestion on where to add it and what to include
 
-    - Tone and Audience Fit: state whether tone matches the intended audience and suggest adjustments (one-line suggestions).
-    - Priority Level: assign each suggested change a priority (High/Medium/Low). Only include high and medium priority suggestions.
+    - Audience Fit: state whether content matches the intended audience and suggest adjustments (one-line suggestions).
+    - Priority Level: assign each suggested change a priority (High/Medium/Low).
     - Final Recommendation: one sentence stating whether content is ready, needs minor edits, or requires major revision.
 
     Formatting requirements for your response:
@@ -270,7 +272,7 @@ QA_PROMPT_TEMPLATE_TEXT = """
        - For every bullet, include a Priority label in bold at the start (e.g., High:).
        - Keep the entire report under 800 words.
 
-    Begin the analysis now on the following input:
+    Begin the analysis now on the following content:
 
     ## Input
     {content}
@@ -287,7 +289,7 @@ script_qa_chain = (
 )
 
 script_qa_response = script_qa_chain.invoke(
-    {"level": LEVEL, "content": final_script_markdown})
+    {"title": video_idea_json['title'], "level": LEVEL, "content": final_script_markdown})
 
 # write script QA report to file
 script_qa_filename = f"video_script_qa_{timestamp}.md"
