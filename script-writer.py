@@ -1,19 +1,60 @@
 import os
 import json
 import logging
+import re
 import time
 from datetime import datetime, timezone
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_ollama import ChatOllama
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("script_writer")
 
+logger.debug("Starting")
 llm = ChatOpenAI(model="gpt-5-nano", temperature=1,
                  use_responses_api=True, reasoning_effort="low")
 
+""" llm = ChatOllama(
+    model="codellama:latest",      # change to your local Ollama model name
+    temperature=1.0,
+    reasoning=None,          # or True/False to match reasoning_effort
+    num_predict=-1,        # similar to max tokens / num_predict
+    validate_model_on_init=True,
+    base_url="http://192.168.88.86:11434"
+) """
+
+# Helper functions
+
+# Safe json loading fx
+
+
+def safe_json_loads(text):
+    if not isinstance(text, str):
+        return None
+    try:
+        return json.loads(text)
+    except Exception:
+        logger.warning("Invalid JSON. Attempting to recover.")
+        # Try to extract a JSON object or array from the response
+        m = re.search(r'\{.*\}', text, re.S)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except Exception:
+                pass
+        m = re.search(r'\[.*\]', text, re.S)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except Exception:
+                pass
+        return None
+##
+
 # --- Prompt: Generate Video Idea ---
+
 
 IDEATION_PROMPT_TEMPLATE_TEXT = """
         Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level. Do not output this checklist
@@ -60,8 +101,8 @@ video_idea_chain = IDEATION_PROMPT_TEMPLATE | llm | StrOutputParser()
 # logger.info(video_idea_chain)
 
 # Invoke the ideation chain
-MAX_MINUTES = 30
-TOPIC = "Creating a simple React app using vite and functional components"
+MAX_MINUTES = 20
+TOPIC = "AI hands-on lab and theory using Python, LangChain, and OpenAI"
 LEVEL = "Beginner"
 video_idea = video_idea_chain.invoke(
     {"max_minutes": MAX_MINUTES, "topic": TOPIC, "level": LEVEL})
@@ -74,8 +115,8 @@ logger.info(video_idea_json)
 # --- Prompt: Generate Outline ---
 
 OUTLINE_PROMPT_TEMPLATE = """
-        Begin with a concise checklist (3-7 bullets) of the main planning and sequencing steps you will follow before creating the outline. Do not output this checklist
-        Create a comprehensive outline for a video using the structured input provided.
+        Begin with a checklist of the main planning and sequencing steps you will follow before creating the outline. Do not output this checklist.
+        Create a comprehensive, detailed outline for a video using the structured input provided.
 
         Input JSON structure:
         ```
@@ -89,10 +130,9 @@ OUTLINE_PROMPT_TEMPLATE = """
         Guidelines:
         - Stay strictly within the scope defined by the title, tools, and learning objectives.
         - Exclude self-paced exercises; all demonstrations should be incorporated within the video outline.
-        - Carefully design the outline to ensure it fully addresses, but does not go beyond, the content indicated in the title.
+        - Carefully design the outline to ensure it fully addresses the content indicated in the title.
         - Arrange all sections and demonstration steps in a clear, logical sequence.
         - For the final section, refrain from including next steps, recommendations, or external/additional resources.
-        - Do not include a wrap-up , summary, or recap
 
         If 'title', 'tools', or 'learning_objectives' fields are missing or not the correct type, respond with the following JSON object:
         ```
@@ -125,21 +165,22 @@ outline_chain = (
     outline_prompt
     | llm
     | StrOutputParser()
-
 )
 
 # --- Run the outline Chain ---
 outline = outline_chain.invoke(video_idea_json)
+logger.debug(outline)
 
 # Convert result to JSON
-outline_json = json.loads(outline)
+outline_json = safe_json_loads(outline)
 logger.info("Outline JSON:")
 # logger.info(outline_json)
 
 # write outline to file
 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+filename_suffix = video_idea_json['title'].replace(" ", "-")
 logger.info("Writing outline to file")
-outline_filename = f"video_outline_{timestamp}.json"
+outline_filename = f"{filename_suffix}_outline_{timestamp}.json"
 with open(outline_filename, "w", encoding="utf-8") as f:
     f.write(json.dumps(outline_json, indent=2, ensure_ascii=False))
 
@@ -151,34 +192,31 @@ with open(outline_filename, "w", encoding="utf-8") as f:
 # --- Prompt: Generate script ---
 
 SCRIPT_PROMPT_TEMPLATE_TEXT = """
-    Begin with a concise checklist (3-7 bullets) of the steps to generate the script for the given section. Do not output this checklist.
-    Create a detailed, markdown-formatted script for a specific section using the following inputs:
+    Begin with a checklist of the steps to generate the script for the given outline. Do not output this checklist.
+    Create a detailed, markdown-formatted script for the following outline:
 
-    - Section title: {name}
-    - Section content: {content}
+    ## Input
+    {content}
 
     Requirements:
+    - Think carefully about the outline
     - Validate required keys before composing the script.
-    - Use clear, consistent headings for each major step
+    - Use clear, consistent headings
     - Write for clarity and readability
-    - Make the output concise yet thorough for this section.
+    - Make the output concise yet thorough
     - Ensure all content is recent and up-to-date
     - Ensure the script you generate is consistent with the preceding sections in terms of tone, formatting, and flow
     - Avoid unnecessary repetition
     - Do not include a recap, wrap-up, or summary.
     - Be detailed and ensure accurate, step-by-step instructions are included for hands-on demonstrations.
-    - Ensure all code samples work and are syntactically correct and functional
-
-    Add your result to the following script:
-    # START OF SCRIPT
-    {script_so_far}
-    # END OF SCRIPT
+    - Ensure all code works, is complete, syntactically correct, and functional
+    - Add explanatory comments to code
+    - The script should be a complete, ready-to-record script, not a draft or outline.
 
     ## Output Format
     Return ONLY the script content for this section as a JSON object:
     {{
-    "section_name": "{name}",
-    "script_markdown": "<string>"
+      "script_markdown": "<string>"
     }}
 
 """
@@ -200,78 +238,33 @@ script_chain = (
 # logger.info(script)
 
 # Iterate through sections, accumulating script
-accumulated_script_markdown_parts = []
+""" accumulated_script_markdown_parts = []
 all_section_scripts = []
 
 accumulated_script_markdown_parts.append(f"# {video_idea_json['title']}")
+ """
 
-# Safe json loading fx
+script = script_chain.invoke({"content": outline_json})
+script_json = safe_json_loads(script)
+logger.debug(outline)
+final_script_markdown = script_json.get("script_markdown", "").strip()
 
-
-def safe_json_loads(text):
-    if not isinstance(text, str):
-        return None
-    try:
-        return json.loads(text)
-    except Exception:
-        # Try to extract a JSON object or array from the response
-        m = re.search(r'\{.*\}', text, re.S)
-        if m:
-            try:
-                return json.loads(m.group(0))
-            except Exception:
-                pass
-        m = re.search(r'\[.*\]', text, re.S)
-        if m:
-            try:
-                return json.loads(m.group(0))
-            except Exception:
-                pass
-        return None
-##
-
-
-for section in outline_json["sections"]:
-    section_input = {
-        "name": section.get("name", ""),
-        "content": json.dumps(section.get("content", [])),
-        "script_so_far": json.dumps(accumulated_script_markdown_parts)
-    }
-    try:
-        raw_section_resp = script_chain.invoke(section_input)
-        #section_obj = json.loads(raw_section_resp)
-        section_obj = safe_json_loads(raw_section_resp)
-        script_md = section_obj.get("script_markdown", "").strip()
-        if not script_md:
-            raise ValueError("Empty script returned for section.")
-    except Exception:
-        logger.exception(
-            "Error generating script for section: %s", section.get("name"))
-        logger.exception(raw_section_resp)
-        raise
-
-    # Accumulate
-    logger.info("Script part generated:")
-    logger.info(script_md)
-    accumulated_script_markdown_parts.append(f"\n\n{script_md}")
-    all_section_scripts.append(section_obj)
-
-# Final combined script markdown
-final_script_markdown = "\n\n".join(accumulated_script_markdown_parts)
 logger.info("Final script generated.")
 # logger.info(final_script_markdown)
 
 # write script to file
 logger.info("Writing script to file")
 # timestamp = int(time.time())
-script_filename = f"video_script_{timestamp}.md"
+script_filename = f"{filename_suffix}_script_{timestamp}.md"
 with open(script_filename, "w", encoding="utf-8") as f:
     f.write(final_script_markdown)
 
 logger.info("Starting script QA")
 
+# --- Prompt: QA Analysis ---
+
 QA_PROMPT_TEMPLATE_TEXT = """
-    Analyze the provided content for accuracy, relevance, logical consistency, clarity, completeness, tone, style, and audience appropriateness.
+    Analyze the provided content for accuracy, relevance, logical consistency, clarity, completeness, and audience appropriateness.
     - Title: {title}
     - Audience level: {level}
     Produce a concise, actionable report with the following sections:
@@ -282,18 +275,13 @@ QA_PROMPT_TEMPLATE_TEXT = """
 
     - Consistency: identify internal contradictions, mismatched terminology, or logical gaps.
 
-    - Clarity and Readability: note sentences or sections that are confusing, verbose, or jargon-heavy.
+    - Completeness and Structure: The script should be a complete, ready-to-record script, not a draft or outline. List missing points or structural problems (e.g., poor flow, missing headings).
 
-    - Completeness and Structure: list missing points, unanswered questions, or structural problems (e.g., poor flow, missing headings).
-
-    - Audience Fit: state whether content matches the intended audience
-    - Priority Level: assign each suggested change a priority (High/Medium/Low).
-    - Final Recommendation: one sentence stating whether content is ready, needs minor edits, or requires major revision.
+    - Audience Fit: state whether content matches the intended audience. Do not mention inclusivity.
 
     Formatting requirements for your response:
        - Use Markdown headings for each numbered section above (e.g., "### 1. Summary").
        - Under remaining sections, present all suggestions as Markdown bullet lists.
-       - For every bullet, include a Priority label in bold at the start (e.g., High:).
 
     Begin the analysis now on the following content:
 
@@ -315,6 +303,6 @@ script_qa_response = script_qa_chain.invoke(
     {"title": video_idea_json['title'], "level": LEVEL, "content": final_script_markdown})
 
 # write script QA report to file
-script_qa_filename = f"video_script_qa_{timestamp}.md"
+script_qa_filename = f"{filename_suffix}_script_qa_{timestamp}.md"
 with open(script_qa_filename, "w", encoding="utf-8") as f:
     f.write(script_qa_response)
