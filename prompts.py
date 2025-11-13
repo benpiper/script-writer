@@ -77,8 +77,19 @@ OUTLINE_PROMPT_TEMPLATE = """
         """
 
 # --- Prompt: Generate script ---
-SCRIPT_PROMPT_TEMPLATE_TEXT = """
+SCRIPT_PROMPT_TEMPLATE_TEXT = """     
+        Write a detailed, engaging, and informative script based on the user-provided topic.
         Begin with a checklist of the steps to generate the script for the given outline. Do not output this checklist.
+
+        STYLE:
+        Write the script in the awesome style of Ben Piper: Direct, informal expert — conversational, slightly snarky, explanatory.
+        Tone: conversational and direct; occasionally snarky or rhetorical (questions, mild sarcasm) but remains authoritative and helpful.
+        Voice: first- or second-person frequent (I, we, you)
+        Sentence length & rhythm: mostly medium-length sentences (10–22 words) with frequent short punchy sentences or fragments for emphasis.
+        Lexical choices: plain, conversational vocabulary with occasional technical terms (explained simply); idioms and informal phrases.
+        Argument style: state a claim bluntly, follow with evidence or examples, then give practical advice or a concrete how-to. Use mild hyperbole for rhetorical effect.
+        Formatting & examples: include concrete links, code-like snippets or exact examples (e.g. URLs), and occasional quoted blocks for cited sources or short excerpts. Do not use bulleted lists or numbered lists.
+
         Create a detailed, markdown-formatted narrative script for the following outline:
 
         ## Input
@@ -86,12 +97,16 @@ SCRIPT_PROMPT_TEMPLATE_TEXT = """
 
         Requirements:
         - Think carefully about the content
+        - Provide an inviting and enthusiastic introduction that clearly explains the topic and its importance.
+        - Start by introducing a concept or term related to the topic.
         - Validate required keys before composing the script.
         - Use clear, consistent headings
         - Write for clarity and readability
         - Make the output concise yet thorough
         - Ensure all content is recent and up-to-date
         - Ensure the script you generate is consistent with the preceding sections in terms of tone, formatting, and flow
+        - Explain different types, methods, or aspects of the topic, providing examples where necessary.
+        - Include practical tips or advice on how to apply the information discussed, making it relatable and entertaining.
         - Avoid unnecessary repetition
         - Do not include a recap, wrap-up, or summary.
         - Be detailed and ensure accurate, step-by-step instructions are included for hands-on demonstrations.

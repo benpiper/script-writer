@@ -28,7 +28,7 @@ def main():
     logger.info("Generating video idea")
 
     MAX_MINUTES = 30
-    TOPIC = "How to implement RAG using local text files, python, and openai"
+    TOPIC = "why and how to use tiktoken in python"
     LEVEL = "Beginner"
     logger.debug("Max minutes: %s, Topic: %s, Level: %s", MAX_MINUTES, TOPIC, LEVEL)
     video_idea_json = generate_video_idea(llm, MAX_MINUTES, TOPIC, LEVEL)
