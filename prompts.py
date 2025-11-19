@@ -1,11 +1,10 @@
 
 # --- Prompt: Generate Video Idea ---
 IDEATION_PROMPT_TEMPLATE_TEXT = """
-        Find a trending video idea for {topic}.
-        Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level. Do not output this checklist.
         Generate an idea for a video that can be quickly recorded and published, guided by the following requirements:
-        - Inputs:
+        Inputs:
         - Topic: {topic} (string)
+        - Domain: {domain} (string)
         - Audience level: {level} (string)
 
         - Output Format
@@ -13,22 +12,21 @@ IDEATION_PROMPT_TEMPLATE_TEXT = """
 
             {{
                 "title": "<string: SEO-optimized title of the video>",
+                "domain": "{domain}",
                 "hook": "<string: 3-line hook>",
-                "tags": ["tag 1", "tag 2", "tag 3"],
-                "tools": ["Tool or framework 1", "Tool or framework 2"]
+                "tags": [<list of tags>],
+                "tools": [<list of tools>],
+                "objectives": [<list of objectives or outcomes>],
             }}
 
-        - Output Constraints:
-        - Only return a single JSON object per response.
+        Output Constraints:
+        - Return only a single JSON object per response.
+        - Do not use emojis
+        - Verify that everything makes sense. If any of the input is inconsistent, correct it in the output.
 
         After generating the output, review it to ensure all requirements and formatting constraints are fulfilled.
-        If validation fails, self-correct and return the correct JSON error object.
+        If validation fails, self-correct and return a valid JSON object.
 
-        - Example output
-            {{
-                "title": "How to write a Hello World program in Python",
-                "tools": ["Python", "VS Code"]
-            }}
         """
 
 # --- Prompt: Generate Outline ---
@@ -41,15 +39,20 @@ OUTLINE_PROMPT_TEMPLATE = """
         {{
             "title": "{title}",
             "tools": {tools},
-            "hook": "{hook}"
+            "hook": "{hook}",
+            "domain": "{domain}",
+            "objectives": "{objectives}",
+
         }}
         ```
 
         Guidelines:
         - Stay strictly within the scope defined by the input.
         - Exclude self-paced exercises; all demonstrations should be incorporated within the video outline.
-        - Carefully design the outline to ensure it fully addresses the content indicated in the title.
+        - Carefully design the outline to ensure it fully addresses the content indicated in the input.
         - Arrange all sections and demonstration steps in a clear, logical sequence.
+        - The outline must be detailed, comprehensive, elaborate, and complete.
+        - Do not use emojis
         - For the final section, refrain from including next steps, recommendations, or external/additional resources.
 
         If 'title' or 'tools' fields are missing or not the correct type, respond with the following JSON object:
@@ -76,19 +79,43 @@ OUTLINE_PROMPT_TEMPLATE = """
 
         """
 
+# --- Prompt: QA Outline ---
+
+OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
+    Analyze the input based on the following criteria:
+
+    - Overall quality judgment (accurate/inaccurate, consistent/inconsistent, clear/unclear).
+
+    - Correctness: Identify major factual or logical errors.
+
+    - Completeness and Structure: The outline should be complete and thorough. There should be no missing points, structural problems, or logical gaps.
+
+    - Decision: PASS or FAIL
+
+    ## Output Format
+
+        Return ONLY a JSON object structured as follows:
+
+    {{
+      "decision": "<pass or fail>",
+      "reason": "<reason for the decision (string)"
+    }}
+    
+    Begin the analysis now on the following content:
+
+    ## Input
+    - Title: {title}
+    - Tools: {tools}
+    - Hook: {hook}
+    - Domain: {domain}
+    - Objectives: {objectives}
+    - Outline JSON:
+      {outline}
+"""
+
 # --- Prompt: Generate script ---
 SCRIPT_PROMPT_TEMPLATE_TEXT = """     
-        Write a detailed, engaging, and informative script based on the user-provided topic.
         Begin with a checklist of the steps to generate the script for the given outline. Do not output this checklist.
-
-        STYLE:
-        Write the script in the awesome style of Ben Piper: Direct, informal expert — conversational, slightly snarky, explanatory.
-        Tone: conversational and direct; occasionally snarky or rhetorical (questions, mild sarcasm) but remains authoritative and helpful.
-        Voice: first- or second-person frequent (I, we, you)
-        Sentence length & rhythm: mostly medium-length sentences (10–22 words) with frequent short punchy sentences or fragments for emphasis.
-        Lexical choices: plain, conversational vocabulary with occasional technical terms (explained simply); idioms and informal phrases.
-        Argument style: state a claim bluntly, follow with evidence or examples, then give practical advice or a concrete how-to. Use mild hyperbole for rhetorical effect.
-        Formatting & examples: include concrete links, code-like snippets or exact examples (e.g. URLs), and occasional quoted blocks for cited sources or short excerpts. Do not use bulleted lists or numbered lists.
 
         Create a detailed, markdown-formatted narrative script for the following outline:
 
@@ -97,22 +124,20 @@ SCRIPT_PROMPT_TEMPLATE_TEXT = """
 
         Requirements:
         - Think carefully about the content
-        - Provide an inviting and enthusiastic introduction that clearly explains the topic and its importance.
         - Start by introducing a concept or term related to the topic.
         - Validate required keys before composing the script.
         - Use clear, consistent headings
-        - Write for clarity and readability
-        - Make the output concise yet thorough
+        - Write in the style of Ben Piper: Direct, blunt, conversational, explanatory, clear, slightly humorous.
+        - Be thorough, comprehensive, detailed, and complete
         - Ensure all content is recent and up-to-date
         - Ensure the script you generate is consistent with the preceding sections in terms of tone, formatting, and flow
         - Explain different types, methods, or aspects of the topic, providing examples where necessary.
-        - Include practical tips or advice on how to apply the information discussed, making it relatable and entertaining.
         - Avoid unnecessary repetition
         - Do not include a recap, wrap-up, or summary.
         - Be detailed and ensure accurate, step-by-step instructions are included for hands-on demonstrations.
         - Ensure all code works, is complete, syntactically correct, and functional
         - Add explanatory comments to code
-        - The script should be a complete, ready-to-record script.
+        - The script should be a complete, ready-to-record script. Not an outline.
         - Do not include cues for visuals or gestures
 
         ## Output Format
@@ -124,7 +149,7 @@ SCRIPT_PROMPT_TEMPLATE_TEXT = """
     """
 
 # --- Prompt: QA Analysis ---
-QA_PROMPT_TEMPLATE_TEXT = """
+SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
     Analyze the input and produce a concise, actionable report with the following sections:
 
     - Overall quality judgment (accurate/inaccurate, consistent/inconsistent, clear/unclear).

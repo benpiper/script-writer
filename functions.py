@@ -1,19 +1,43 @@
 import json
 import re
 import logging
+from typing import Dict, Union
 from datetime import datetime, timezone
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from langchain_ollama import ChatOllama
-from prompts import IDEATION_PROMPT_TEMPLATE_TEXT, OUTLINE_PROMPT_TEMPLATE, SCRIPT_PROMPT_TEMPLATE_TEXT, QA_PROMPT_TEMPLATE_TEXT
+from prompts import IDEATION_PROMPT_TEMPLATE_TEXT, OUTLINE_PROMPT_TEMPLATE, SCRIPT_PROMPT_TEMPLATE_TEXT, SCRIPT_QA_PROMPT_TEMPLATE_TEXT, OUTLINE_QA_PROMPT_TEMPLATE_TEXT
 
 # Helper functions
 
+# Get LLM
+
+
+def get_llm(model):
+    """ Return model and provider based on a string """
+    try:
+        if (model == "gpt-5-nano"):
+            llm = ChatOpenAI(model="gpt-5-nano", temperature=1,
+                             use_responses_api=True, reasoning_effort="low")
+        elif (model == "gpt-oss"):
+            llm = ChatOllama(
+                model="gpt-oss",
+                temperature=1.0,
+                reasoning=None,
+                num_predict=-1,        # similar to max tokens / num_predict
+                validate_model_on_init=True,
+                base_url="http://192.168.88.86:11434"
+            )
+        return llm
+    except NameError as e:
+        raise NameError("Model not found") from e
+
+
 # Safe json loading fx
 
-
 def safe_json_loads(text):
+    """ Load JSON safely """
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("safe_json_loader")
     if not isinstance(text, str):
@@ -41,7 +65,7 @@ def safe_json_loads(text):
 # Function: Generate video idea
 
 
-def generate_video_idea(llm, max_minutes, topic, level):
+def generate_video_idea(llm: Union[ChatOpenAI, ChatOllama], max_minutes: float, topic: str, domain: str, level: str) -> Dict:
     """ Generate video idea """
 
     IDEATION_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
@@ -54,7 +78,7 @@ def generate_video_idea(llm, max_minutes, topic, level):
 
     # Invoke the ideation chain
     video_idea = video_idea_chain.invoke(
-        {"max_minutes": max_minutes, "topic": topic, "level": level})
+        {"max_minutes": max_minutes, "topic": topic, "domain": domain, "level": level})
 
     # Convert result to JSON
     # video_idea_json = json.loads(video_idea)
@@ -64,7 +88,7 @@ def generate_video_idea(llm, max_minutes, topic, level):
 # Function: Generate video outline
 
 
-def generate_video_outline(llm, video_idea):
+def generate_video_outline(llm: Union[ChatOpenAI, ChatOllama], video_idea):
     """ Generate video outline from video_idea (json) """
 
     outline_prompt = ChatPromptTemplate.from_template(OUTLINE_PROMPT_TEMPLATE)
@@ -85,7 +109,21 @@ def generate_video_outline(llm, video_idea):
 # Function: Generate video script
 
 
-def generate_video_script(llm, outline):
+def generate_outline_qa_report(llm: Union[ChatOpenAI, ChatOllama], video_idea, outline):
+    """ Generate QA report for outline """
+    OUTLINE_QA_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
+        OUTLINE_QA_PROMPT_TEMPLATE_TEXT)
+    outline_qa_chain = (
+        OUTLINE_QA_PROMPT_TEMPLATE
+        | llm
+        | StrOutputParser()
+    )
+    outline_qa_response = outline_qa_chain.invoke(
+        {"outline": outline, **video_idea})
+    return json.loads(outline_qa_response)
+
+
+def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline):
     """ Generate video script from outline (json)
     Non-iterative version """
 
@@ -116,17 +154,17 @@ def generate_video_script(llm, outline):
     script_json = safe_json_loads(script)
     return script_json
 
-# Function: Generate QA of script
+# Function: Generate QA for script
 
 
-def generate_qa_report(llm, title, level, script_md):
+def generate_qa_report(llm: Union[ChatOpenAI, ChatOllama], title, level, script_md):
     """ Generate QA report from script """
-    QA_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
-        QA_PROMPT_TEMPLATE_TEXT)
+    SCRIPT_QA_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
+        SCRIPT_QA_PROMPT_TEMPLATE_TEXT)
 
     # --- Construct the script QA chain ---
     script_qa_chain = (
-        QA_PROMPT_TEMPLATE
+        SCRIPT_QA_PROMPT_TEMPLATE
         | llm
         | StrOutputParser()
     )
