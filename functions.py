@@ -1,15 +1,20 @@
+""" functions.py """
+import os
 import json
 import re
 import logging
+from dotenv import load_dotenv
 from typing import Dict, Union
 from datetime import datetime, timezone
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from langchain_ollama import ChatOllama
-from prompts import IDEATION_PROMPT_TEMPLATE_TEXT, OUTLINE_PROMPT_TEMPLATE, SCRIPT_PROMPT_TEMPLATE_TEXT, SCRIPT_QA_PROMPT_TEMPLATE_TEXT, OUTLINE_QA_PROMPT_TEMPLATE_TEXT
+from prompts import IDEATION_PROMPT_TEMPLATE_TEXT, IDEATION_QA_PROMPT_TEMPLATE_TEXT, OUTLINE_PROMPT_TEMPLATE, SCRIPT_PROMPT_TEMPLATE_TEXT, SCRIPT_QA_PROMPT_TEMPLATE_TEXT, OUTLINE_QA_PROMPT_TEMPLATE_TEXT, OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT
 
 # Helper functions
+
+load_dotenv()
 
 # Get LLM
 
@@ -27,7 +32,7 @@ def get_llm(model):
                 reasoning=None,
                 num_predict=-1,        # similar to max tokens / num_predict
                 validate_model_on_init=True,
-                base_url="http://192.168.88.86:11434"
+                base_url=os.getenv('OLLAMA_BASE_URL')
             )
         return llm
     except NameError as e:
@@ -41,6 +46,7 @@ def safe_json_loads(text):
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("safe_json_loader")
     if not isinstance(text, str):
+        logger.warning("Not a string")
         return None
     try:
         return json.loads(text)
@@ -59,36 +65,72 @@ def safe_json_loads(text):
                 return json.loads(m.group(0))
             except Exception:
                 pass
+        logger.warning("Unable to recover JSON.")
         return None
-##
+
+
+"""  """
+# Function: Write JSON
+
+
+def write_json(data, filename):
+    """ Write JSON data to a file """
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(json.dumps(data, indent=2, ensure_ascii=False))
+
+# Function: Write markdown
+
+
+def write_markdown(data, filename):
+    """ Write markdown to a file """
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(data)
+
+# Function: Generate and invoke chain
+
+
+def create_invoke_chain(llm, prompt_template_text, input_json):
+    """ Create and invoke chain """
+    prompt_template = ChatPromptTemplate.from_template(prompt_template_text)
+    chain = prompt_template | llm | StrOutputParser()
+    result = chain.invoke(input_json)
+    return result
 
 # Function: Generate video idea
 
 
-def generate_video_idea(llm: Union[ChatOpenAI, ChatOllama], max_minutes: float, topic: str, domain: str, level: str) -> Dict:
+def generate_video_idea(llm: Union[ChatOpenAI, ChatOllama], topic: str, domain: str, level: str) -> Dict:
     """ Generate video idea """
-
-    IDEATION_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
-        IDEATION_PROMPT_TEMPLATE_TEXT)
-
-    # Construct the ideation chain: prompt > LLM > string
-    video_idea_chain = IDEATION_PROMPT_TEMPLATE | llm | StrOutputParser()
-    # logger.info("Chain:")
-    # logger.info(video_idea_chain)
-
-    # Invoke the ideation chain
-    video_idea = video_idea_chain.invoke(
-        {"max_minutes": max_minutes, "topic": topic, "domain": domain, "level": level})
-
+    input_json = {"topic": topic, "domain": domain, "level": level}
+    video_idea = create_invoke_chain(
+        llm, IDEATION_PROMPT_TEMPLATE_TEXT, input_json)
+    logging.debug("Idea response: %s", video_idea)
     # Convert result to JSON
     # video_idea_json = json.loads(video_idea)
-    return (json.loads(video_idea))
+    return safe_json_loads(video_idea)
 
+
+# Function: Generate ideation post-QA output
+
+def generate_idea_qa_report(llm: Union[ChatOpenAI, ChatOllama], video_idea: Dict):
+    """ Generate QA report for idea """
+    IDEATION_QA_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
+        IDEATION_QA_PROMPT_TEMPLATE_TEXT)
+    idea_qa_chain = (
+        IDEATION_QA_PROMPT_TEMPLATE
+        | llm
+        | StrOutputParser()
+    )
+    idea_qa_response = idea_qa_chain.invoke(
+        video_idea)
+    logging.debug("Idea QA response: %s", idea_qa_response)
+    idea_qa_response_json = safe_json_loads(idea_qa_response)
+    return idea_qa_response_json
 
 # Function: Generate video outline
 
 
-def generate_video_outline(llm: Union[ChatOpenAI, ChatOllama], video_idea):
+def generate_video_outline(llm: Union[ChatOpenAI, ChatOllama], video_idea: str):
     """ Generate video outline from video_idea (json) """
 
     outline_prompt = ChatPromptTemplate.from_template(OUTLINE_PROMPT_TEMPLATE)
@@ -109,7 +151,7 @@ def generate_video_outline(llm: Union[ChatOpenAI, ChatOllama], video_idea):
 # Function: Generate video script
 
 
-def generate_outline_qa_report(llm: Union[ChatOpenAI, ChatOllama], video_idea, outline):
+def generate_outline_qa_report(llm: Union[ChatOpenAI, ChatOllama], video_idea: str, outline: str):
     """ Generate QA report for outline """
     OUTLINE_QA_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
         OUTLINE_QA_PROMPT_TEMPLATE_TEXT)
@@ -120,10 +162,18 @@ def generate_outline_qa_report(llm: Union[ChatOpenAI, ChatOllama], video_idea, o
     )
     outline_qa_response = outline_qa_chain.invoke(
         {"outline": outline, **video_idea})
-    return json.loads(outline_qa_response)
+    outline_qa_response_json = safe_json_loads(outline_qa_response)
+    return outline_qa_response_json
 
+# Function: Generate outline based on QA report
+def generate_outline_final(llm, outline_qa_report, outline_json):
+    """ Generate new outline based on QA report """
+    input_json = {"outline": outline_json, "outline_qa_report": outline_qa_report}
+    outline_final = create_invoke_chain(
+        llm, OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT, input_json)
+    return safe_json_loads(outline_final)
 
-def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline):
+def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: str):
     """ Generate video script from outline (json)
     Non-iterative version """
 
@@ -151,13 +201,15 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline):
     """
 
     script = script_chain.invoke({"content": outline})
-    script_json = safe_json_loads(script)
-    return script_json
+    logging.debug("Generate script response: %s", script)
+    #script_json = safe_json_loads(script)
+    #return script_json
+    return script
 
 # Function: Generate QA for script
 
 
-def generate_qa_report(llm: Union[ChatOpenAI, ChatOllama], title, level, script_md):
+def generate_qa_report(llm: Union[ChatOpenAI, ChatOllama], title: str, level: str, script_md: str):
     """ Generate QA report from script """
     SCRIPT_QA_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
         SCRIPT_QA_PROMPT_TEMPLATE_TEXT)
@@ -172,4 +224,4 @@ def generate_qa_report(llm: Union[ChatOpenAI, ChatOllama], title, level, script_
     script_qa_response = script_qa_chain.invoke(
         {"title": title, "level": level, "content": script_md})
 
-    return script_qa_response
+    return safe_json_loads(script_qa_response)

@@ -1,54 +1,96 @@
 
 # --- Prompt: Generate Video Idea ---
 IDEATION_PROMPT_TEMPLATE_TEXT = """
-        Generate an idea for a video that can be quickly recorded and published, guided by the following requirements:
+        Thoughtfully develop the following content idea:
         Inputs:
         - Topic: {topic} (string)
         - Domain: {domain} (string)
         - Audience level: {level} (string)
 
+        Guidelines
+        - Topic, domain, and audience level must align
+        - Do not allow fictional tools or concepts
+        If any of the input is incorrect, return this JSON error object:
+
+          {{
+            "error": "<reason>"
+          }}
+
+        
         - Output Format
         Return your answer as valid JSON using the following format:
 
             {{
-                "title": "<string: SEO-optimized title of the video>",
+                "title": "<string: SEO-optimized title>",
+                "title_contrarian": "<string: SEO-optimized contrarian title>",
+                "topic": "{topic}",
                 "domain": "{domain}",
-                "hook": "<string: 3-line hook>",
-                "tags": [<list of tags>],
-                "tools": [<list of tools>],
-                "objectives": [<list of objectives or outcomes>],
+                "level": "{level}",
+                "hook": "<string: 3-sentence hook>",
+                "tags": <list of tags>,
+                "tools": <list of tools (if applicable)>,
+                "objectives": <list of objectives or outcomes>,
             }}
 
         Output Constraints:
-        - Return only a single JSON object per response.
+        - Return only one JSON object per response.
+        - Do not use markdown
         - Do not use emojis
-        - Verify that everything makes sense. If any of the input is inconsistent, correct it in the output.
 
         After generating the output, review it to ensure all requirements and formatting constraints are fulfilled.
         If validation fails, self-correct and return a valid JSON object.
 
         """
 
+# --- Prompt: Ideation QA Prompt Template ---
+IDEATION_QA_PROMPT_TEMPLATE_TEXT = """
+        The following input is a high-level idea for content.
+        Guidelines:
+        - Correct all factual, logical, spelling, grammar, and capitalization errors.
+        - The title, topic, domain, level, hook, tags, tools, and objectives should align. If any do not align, change other fields to make them match the title and topic.
+        - If the title and topic do not align, change the title to align with the topic.
+        - If the topic is nonsensical, unclear, invalid, contradictory, or refers to things that don't exist, throw an error.
+        
+        ## Input
+        {{
+                "title": "{title}",
+                "title_contrarian": "{title_contrarian}",
+                "topic": {topic},
+                "domain": "{domain}",
+                "level": "{level}",
+                "hook": "{hook}",
+                "tags": {tags},
+                "tools": {tools},
+                "objectives": {objectives},
+        }}
+
+        ## Output format
+        Output one JSON object with corrections using the same keys.
+        Append an additional key "qa_status" with brief remarks.
+        Do not use markdown.
+"""
+
 # --- Prompt: Generate Outline ---
 OUTLINE_PROMPT_TEMPLATE = """
         Begin with a checklist of the main planning and sequencing steps you will follow before creating the outline. Do not output this checklist.
-        Create a comprehensive, detailed outline for a video using the structured input provided.
+        Create a comprehensive, detailed outline using the structured input provided.
 
         Input JSON structure:
-        ```
         {{
             "title": "{title}",
-            "tools": {tools},
-            "hook": "{hook}",
             "domain": "{domain}",
-            "objectives": "{objectives}",
+            "tools": {tools},
+            "level": "{level}",
+            "hook": "{hook}",
+            "tags": {tags},
+            "tools": {tools},
+            "objectives": {objectives},
 
         }}
-        ```
 
         Guidelines:
         - Stay strictly within the scope defined by the input.
-        - Exclude self-paced exercises; all demonstrations should be incorporated within the video outline.
+        - Exclude self-paced exercises; all demonstrations should be incorporated within the outline.
         - Carefully design the outline to ensure it fully addresses the content indicated in the input.
         - Arrange all sections and demonstration steps in a clear, logical sequence.
         - The outline must be detailed, comprehensive, elaborate, and complete.
@@ -56,22 +98,22 @@ OUTLINE_PROMPT_TEMPLATE = """
         - For the final section, refrain from including next steps, recommendations, or external/additional resources.
 
         If 'title' or 'tools' fields are missing or not the correct type, respond with the following JSON object:
-        ```
+        
         {{"error": "Missing or invalid input fields."}}
-        ```
+        
 
-        After outlining, validate that each section directly supports the provided inputs, and confirm that all demonstrations are video-based and in logical order.
+        After outlining, validate that each section directly supports the provided inputs, and confirm that all sections and steps are in logical order.
         If any guideline is not fully met, correct the outline before producing your final output.
 
         # Output Format
         - Return a JSON object structured as:
-        ```
+        
         {{
             "sections": [
             {{ "name": "<string>", "content": [<string>, ...] }}
             ]
         }}
-        ```
+        
         - 'sections' should be an array of section objects.
         - Each section object includes:
         - 'name': the title of the section (string)
@@ -86,9 +128,11 @@ OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
 
     - Overall quality judgment (accurate/inaccurate, consistent/inconsistent, clear/unclear).
 
-    - Correctness: Identify major factual or logical errors.
+    - Correctness: Identify any factual or logical errors.
 
     - Completeness and Structure: The outline should be complete and thorough. There should be no missing points, structural problems, or logical gaps.
+
+    - Consistency: The outline should be internally consistent and free of contradictions.
 
     - Decision: PASS or FAIL
 
@@ -98,7 +142,11 @@ OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
 
     {{
       "decision": "<pass or fail>",
-      "reason": "<reason for the decision (string)"
+      "reason": "<reason for the decision (string)",
+      "quality": "<overall quality judgment> (string)",
+      "correctness": <list of factual or logical errors>,
+      "completeness": <list of gaps or missing points>,
+      "consistency": <list of inconsistent or contradictory points>,
     }}
     
     Begin the analysis now on the following content:
@@ -113,9 +161,17 @@ OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
       {outline}
 """
 
+# --- Prompt: Generate outline based on QA feedback ---
+OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT = """
+        Correct the outline based on the feedback in the QA report.
+        ## Inputs
+        - Outline: {outline}
+        - QA Report: {outline_qa_report}
+"""
+
 # --- Prompt: Generate script ---
 SCRIPT_PROMPT_TEMPLATE_TEXT = """     
-        Begin with a checklist of the steps to generate the script for the given outline. Do not output this checklist.
+        Begin with a checklist of the steps to generate a script for the given outline. Do not output this checklist.
 
         Create a detailed, markdown-formatted narrative script for the following outline:
 
@@ -127,7 +183,7 @@ SCRIPT_PROMPT_TEMPLATE_TEXT = """
         - Start by introducing a concept or term related to the topic.
         - Validate required keys before composing the script.
         - Use clear, consistent headings
-        - Write in the style of Ben Piper: Direct, blunt, conversational, explanatory, clear, slightly humorous.
+        - Write in the style of Ben Piper: Direct, clear, conversational, explanatory, authoritative
         - Be thorough, comprehensive, detailed, and complete
         - Ensure all content is recent and up-to-date
         - Ensure the script you generate is consistent with the preceding sections in terms of tone, formatting, and flow
@@ -135,17 +191,11 @@ SCRIPT_PROMPT_TEMPLATE_TEXT = """
         - Avoid unnecessary repetition
         - Do not include a recap, wrap-up, or summary.
         - Be detailed and ensure accurate, step-by-step instructions are included for hands-on demonstrations.
-        - Ensure all code works, is complete, syntactically correct, and functional
-        - Add explanatory comments to code
+        - If code is included, it should be complete, syntactically correct, consistent, and functional
+        - Add explanatory comments to any code
         - The script should be a complete, ready-to-record script. Not an outline.
-        - Do not include cues for visuals or gestures
-
-        ## Output Format
-        Return ONLY the script content for this section as a JSON object:
-        {{
-        "script_markdown": "<string>"
-        }}
-
+        - The script must be a spoken narrative. Use complete sentences.
+        - Do not include cues for gestures or visuals
     """
 
 # --- Prompt: QA Analysis ---
@@ -160,10 +210,16 @@ SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
 
     - Audience Fit: whether content matches the intended audience. Do not mention inclusivity.
 
+    - Score: PASS or FAIL
+
+    ## Output
+    Return one JSON object.
+
     Begin the analysis now on the following content:
 
     ## Input
     - Title: {title}
     - Audience level: {level}
+    - Content:
     {content}
 """
