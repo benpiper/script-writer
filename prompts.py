@@ -52,8 +52,8 @@ IDEATION_QA_PROMPT_TEMPLATE_TEXT = """
         The following input is a high-level idea for content.
         Guidelines:
         - Correct all factual, logical, spelling, grammar, and capitalization errors.
-        - The title, topic, domain, level, hook, tags, tools, and objectives should align. If any do not align, change other fields to make them match the title and topic.
-        - If the title and topic do not align, change the title to align with the topic.
+        - The title provided is the user-selected title. DO NOT CHANGE THE TITLE.
+        - The topic, domain, level, hook, tags, tools, and objectives should align with the title. If any do not align, change other fields to make them match the title.
         - If the topic is nonsensical, unclear, invalid, contradictory, or refers to things that don't exist, throw an error.
         
         ## Input

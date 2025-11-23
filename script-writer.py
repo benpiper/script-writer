@@ -8,7 +8,7 @@ from functions import (
     get_llm, ask_approval, generate_video_idea, generate_idea_qa_report,
     generate_video_outline, generate_video_script, generate_qa_report,
     generate_outline_qa_report, generate_outline_final, generate_script_final,
-    write_json, write_markdown
+    write_json, write_markdown, select_title
 )
 
 logging.basicConfig(level=logging.DEBUG)
@@ -31,11 +31,21 @@ class ScriptWriter:
         logger.debug(debug_message)
 
         video_idea_json = self.step_ideation()
+        
+        # Select title
+        selected_title = select_title(video_idea_json)
+        video_idea_json['title'] = selected_title
+        
         self.filename_suffix = video_idea_json['title'].replace(" ", "-").lower()
         
         self.write_artifact(video_idea_json, "1_idea.json")
 
         video_idea_qa_json = self.step_ideation_qa(video_idea_json)
+        
+        # Ensure selected title is preserved
+        if selected_title:
+            video_idea_qa_json['title'] = selected_title
+            
         self.write_artifact(video_idea_qa_json, "2_idea_qa.json")
 
         if "error" in video_idea_qa_json:

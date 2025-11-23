@@ -67,6 +67,40 @@ def ask_approval():
         return True
 
 
+def select_title(video_idea_json):
+    """ Select a title from the generated options with a timeout """
+    titles = {
+        "1": ("Original", video_idea_json.get("title")),
+        "2": ("Contrarian", video_idea_json.get("title_contrarian")),
+        "3": ("Descriptive", video_idea_json.get("title_descriptive")),
+        "4": ("Problem/Solution", video_idea_json.get("title_problem_solution")),
+        "5": ("How-To", video_idea_json.get("title_how_to")),
+        "6": ("Curiosity", video_idea_json.get("title_curiosity")),
+    }
+    
+    print("\nSelect a title (defaulting to 1 in 10 seconds):")
+    for key, (desc, title) in titles.items():
+        if title:
+            print(f"{key}. {desc}: {title}")
+            
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(10)
+    
+    try:
+        choice = input("\nEnter choice (1-6): ").strip()
+        signal.alarm(0)
+        if choice in titles and titles[choice][1]:
+            selected_title = titles[choice][1]
+            logging.info(f"Selected title: {selected_title}")
+            return selected_title
+    except TimeoutError:
+        logging.info("Timeout reached. Defaulting to original title.")
+    except Exception as e:
+        logging.error(f"Error during selection: {e}")
+        
+    return video_idea_json.get("title")
+
+
 # Safe json loading fx
 
 def safe_json_loads(text):
