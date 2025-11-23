@@ -22,22 +22,20 @@ load_dotenv()
 
 def get_llm(model):
     """ Return model and provider based on a string """
-    try:
-        if (model == "gpt-5-nano"):
-            llm = ChatOpenAI(model="gpt-5-nano", temperature=1,
-                             use_responses_api=True, reasoning_effort="low")
-        elif (model == "gpt-oss"):
-            llm = ChatOllama(
-                model="gpt-oss",
-                temperature=1.0,
-                reasoning=None,
-                num_predict=-1,        # similar to max tokens / num_predict
-                validate_model_on_init=True,
-                base_url=os.getenv('OLLAMA_BASE_URL')
-            )
-        return llm
-    except NameError as e:
-        raise NameError("Model not found") from e
+    if model == "gpt-5-nano":
+        return ChatOpenAI(model="gpt-5-nano", temperature=1,
+                          use_responses_api=True, reasoning_effort="low")
+    elif model == "gpt-oss":
+        return ChatOllama(
+            model="gpt-oss",
+            temperature=1.0,
+            reasoning=None,
+            num_predict=-1,        # similar to max tokens / num_predict
+            validate_model_on_init=True,
+            base_url=os.getenv('OLLAMA_BASE_URL')
+        )
+    else:
+        raise ValueError(f"Model '{model}' not supported")
 
 
 def timeout_handler(signum, frame):

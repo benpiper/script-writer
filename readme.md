@@ -2,10 +2,30 @@
 
 ## Requirements
 
-uv
+- uv
+- Python 3
+
+## Usage
+
+Run the script using `uv`:
 
 ```sh
-uv run --env-file .env -- python3 script-writer.py
+uv run script-writer.py --topic "Your Topic" --domain "Your Domain" --level "Beginner" --model "gpt-oss"
+```
+
+### Arguments
+
+- `--topic`: The topic of the video (default: "How to tell if an IT job listing is a ghost job")
+- `--domain`: The domain of the topic (default: "information technology")
+- `--level`: The target audience level (default: "Beginner")
+- `--model`: The LLM model to use (default: "gpt-oss")
+
+### Help
+
+To see all available options:
+
+```sh
+uv run script-writer.py --help
 ```
 
 ## Prompt engineering
