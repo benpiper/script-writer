@@ -3,6 +3,7 @@ import os
 import json
 import re
 import logging
+import signal
 from dotenv import load_dotenv
 from typing import Dict, Union
 from datetime import datetime, timezone
@@ -10,7 +11,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from langchain_ollama import ChatOllama
-from prompts import IDEATION_PROMPT_TEMPLATE_TEXT, IDEATION_QA_PROMPT_TEMPLATE_TEXT, OUTLINE_PROMPT_TEMPLATE, SCRIPT_PROMPT_TEMPLATE_TEXT, SCRIPT_QA_PROMPT_TEMPLATE_TEXT, OUTLINE_QA_PROMPT_TEMPLATE_TEXT, OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT
+from prompts import IDEATION_PROMPT_TEMPLATE_TEXT, IDEATION_QA_PROMPT_TEMPLATE_TEXT, OUTLINE_PROMPT_TEMPLATE, SCRIPT_PROMPT_TEMPLATE_TEXT, SCRIPT_QA_PROMPT_TEMPLATE_TEXT, OUTLINE_QA_PROMPT_TEMPLATE_TEXT, OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT, SCRIPT_FINAL_PROMPT_TEMPLATE_TEXT
 
 # Helper functions
 
@@ -39,6 +40,35 @@ def get_llm(model):
         raise NameError("Model not found") from e
 
 
+def timeout_handler(signum, frame):
+    raise TimeoutError
+
+
+# Function: Ask for approval
+
+
+def ask_approval():
+    """ Ask for approval with a 10-second timeout """
+    print("Enter 1 to approve, any other key to decline: ")
+    
+    # Set the signal handler and a timeout
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(10)  # Set a 10-second timer
+
+    try:
+        choice = input()
+        signal.alarm(0)  # Cancel the alarm
+        if choice == '1':
+            logging.info("Approved")
+            return True
+        else:
+            logging.info("Not approved")
+            return False
+    except TimeoutError:
+        logging.info("No input provided; defaulting to Approved")
+        return True
+
+
 # Safe json loading fx
 
 def safe_json_loads(text):
@@ -51,7 +81,7 @@ def safe_json_loads(text):
     try:
         return json.loads(text)
     except Exception:
-        logger.warning("Invalid JSON. Attempting to recover.")
+        logger.warning("Invalid JSON. %s. Attempting to recover.", text)
         # Try to extract a JSON object or array from the response
         m = re.search(r'\{.*\}', text, re.S)
         if m:
@@ -65,7 +95,7 @@ def safe_json_loads(text):
                 return json.loads(m.group(0))
             except Exception:
                 pass
-        logger.warning("Unable to recover JSON.")
+        logger.warning("Unable to recover JSON from %s", text)
         return None
 
 
@@ -166,12 +196,16 @@ def generate_outline_qa_report(llm: Union[ChatOpenAI, ChatOllama], video_idea: s
     return outline_qa_response_json
 
 # Function: Generate outline based on QA report
+
+
 def generate_outline_final(llm, outline_qa_report, outline_json):
     """ Generate new outline based on QA report """
-    input_json = {"outline": outline_json, "outline_qa_report": outline_qa_report}
+    input_json = {"outline": outline_json,
+                  "outline_qa_report": outline_qa_report}
     outline_final = create_invoke_chain(
         llm, OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT, input_json)
     return safe_json_loads(outline_final)
+
 
 def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: str):
     """ Generate video script from outline (json)
@@ -202,8 +236,8 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: str):
 
     script = script_chain.invoke({"content": outline})
     logging.debug("Generate script response: %s", script)
-    #script_json = safe_json_loads(script)
-    #return script_json
+    # script_json = safe_json_loads(script)
+    # return script_json
     return script
 
 # Function: Generate QA for script
@@ -225,3 +259,23 @@ def generate_qa_report(llm: Union[ChatOpenAI, ChatOllama], title: str, level: st
         {"title": title, "level": level, "content": script_md})
 
     return safe_json_loads(script_qa_response)
+
+
+def generate_script_final(llm: Union[ChatOpenAI, ChatOllama], script_qa_response: str, video_script: str):
+    """ Correct video script using QA feedback """
+
+    SCRIPT_FINAL_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
+        SCRIPT_FINAL_PROMPT_TEMPLATE_TEXT)
+
+    # --- Construct the script chain ---
+    script_chain = (
+        SCRIPT_FINAL_PROMPT_TEMPLATE
+        | llm
+        | StrOutputParser()
+
+    )
+    chain_input = {"script_qa_report": script_qa_response,
+                   "script": video_script}
+    script = script_chain.invoke(chain_input)
+    logging.debug("Generate corrected script response: %s", script)
+    return script

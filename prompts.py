@@ -18,15 +18,19 @@ IDEATION_PROMPT_TEMPLATE_TEXT = """
 
         
         - Output Format
-        Return your answer as valid JSON using the following format:
+        Return one JSON object using the following format:
 
             {{
                 "title": "<string: SEO-optimized title>",
-                "title_contrarian": "<string: SEO-optimized contrarian title>",
+                "title_contrarian": "<string: contrarian title>",
+                "title_descriptive": "<string: descriptive title>",
+                "title_problem_solution": "<string: problem-solution>",
+                "title_how_to": "<string: how-to>",
+                "title_curiosity": "<string: curiosity>",
                 "topic": "{topic}",
                 "domain": "{domain}",
                 "level": "{level}",
-                "hook": "<string: 3-sentence hook>",
+                "hook": "<string: 2-sentence hook>",
                 "tags": <list of tags>,
                 "tools": <list of tools (if applicable)>,
                 "objectives": <list of objectives or outcomes>,
@@ -36,6 +40,7 @@ IDEATION_PROMPT_TEMPLATE_TEXT = """
         - Return only one JSON object per response.
         - Do not use markdown
         - Do not use emojis
+        - SEO-optimize all titles
 
         After generating the output, review it to ensure all requirements and formatting constraints are fulfilled.
         If validation fails, self-correct and return a valid JSON object.
@@ -164,9 +169,19 @@ OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
 # --- Prompt: Generate outline based on QA feedback ---
 OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT = """
         Correct the outline based on the feedback in the QA report.
+        
         ## Inputs
         - Outline: {outline}
         - QA Report: {outline_qa_report}
+
+        ## Output Format
+        - Return a JSON object structured as:
+        
+        {{
+            "sections": [
+            {{ "name": "<string>", "content": [<string>, ...] }}
+            ]
+        }}
 """
 
 # --- Prompt: Generate script ---
@@ -189,24 +204,25 @@ SCRIPT_PROMPT_TEMPLATE_TEXT = """
         - Ensure the script you generate is consistent with the preceding sections in terms of tone, formatting, and flow
         - Explain different types, methods, or aspects of the topic, providing examples where necessary.
         - Avoid unnecessary repetition
-        - Do not include a recap, wrap-up, or summary.
         - Be detailed and ensure accurate, step-by-step instructions are included for hands-on demonstrations.
         - If code is included, it should be complete, syntactically correct, consistent, and functional
         - Add explanatory comments to any code
         - The script should be a complete, ready-to-record script. Not an outline.
         - The script must be a spoken narrative. Use complete sentences.
+        - Do not use bullets or numbered points
+        - Do not use tables
+        - Expand all acronyms in parentheses
+        - Define all technical terms
         - Do not include cues for gestures or visuals
     """
 
 # --- Prompt: QA Analysis ---
 SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
-    Analyze the input and produce a concise, actionable report with the following sections:
-
-    - Overall quality judgment (accurate/inaccurate, consistent/inconsistent, clear/unclear).
+    Analyze the input and produce concise, actionable suggestions in a report with the following sections:
 
     - Correctness: identify major factual errors. For each issue include why it is incorrect (brief explanation).
 
-    - Completeness and Structure: The script should be a complete script, not a draft or outline. List missing points, structural problems, or logical gaps.
+    - Completeness and Structure: The script should be a complete script, not a draft or outline. List missing points, structural problems, incomplete sentences, or logical gaps to be corrected.
 
     - Audience Fit: whether content matches the intended audience. Do not mention inclusivity.
 
@@ -222,4 +238,21 @@ SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
     - Audience level: {level}
     - Content:
     {content}
+"""
+
+# --- Prompt: Generate final script based on QA feedback ---
+SCRIPT_FINAL_PROMPT_TEMPLATE_TEXT = """
+        You will be given a markdown script and a QA report with suggestions for improvement.
+        Guidelines:
+        - Do not use bullets or numbered points
+        - Do not use tables
+        - Return the corrected script in markdown format.
+
+        ## Output Format
+        - Markdown
+        
+        ## Inputs
+        - QA Report: {script_qa_report}
+        - Script: {script}
+
 """

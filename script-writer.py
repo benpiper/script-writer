@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
-from functions import get_llm, generate_video_idea, generate_idea_qa_report, generate_video_outline, generate_video_script, generate_qa_report, generate_outline_qa_report, generate_outline_final, write_json, write_markdown
+from functions import get_llm, ask_approval, generate_video_idea, generate_idea_qa_report, generate_video_outline, generate_video_script, generate_qa_report, generate_outline_qa_report, generate_outline_final, generate_script_final, write_json, write_markdown
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("script_writer")
@@ -19,21 +19,24 @@ def main():
 
     logger.info("Generating video idea")
 
-    TOPIC: str = "express.js"
-    DOMAIN: str = "Information technology"
+    TOPIC: str = "How to play the harmonica"
+    DOMAIN: str = "music"
     LEVEL: str = "Beginner"
     debug_message = f"Topic: {TOPIC}, Domain: {DOMAIN}, Level: {LEVEL}"
     logger.debug(debug_message)
+    approval_status = False
 
     # Generate video idea
+    while approval_status is False:
+        video_idea_json = generate_video_idea(
+            llm, TOPIC, DOMAIN, LEVEL)
+        logger.info("Video idea JSON")
+        logger.info(video_idea_json)
+        filename_suffix = video_idea_json['title'].replace(" ", "-").lower()
+        # Ask for approval
+        approval_status = ask_approval()
 
-    video_idea_json = generate_video_idea(
-        llm, TOPIC, DOMAIN, LEVEL)
-    logger.info("Video idea JSON")
-    logger.info(video_idea_json)
-
-    filename_suffix = video_idea_json['title'].replace(" ", "-").lower()
-
+    approval_status = False
     # write video idea to file
     logger.info("Writing video idea to file")
     idea_filename = f"output/{timestamp}_{filename_suffix}_1_idea.json"
@@ -51,12 +54,17 @@ def main():
         raise Exception
 
     # Generate video outline
+    while approval_status is False:
+        logger.info("Generating video outline")
 
-    logger.info("Generating video outline")
+        outline_json = generate_video_outline(llm, video_idea_qa_json)
+        logger.info("Outline JSON")
+        logger.info(outline_json)
 
-    outline_json = generate_video_outline(llm, video_idea_qa_json)
-    logger.debug(outline_json)
-
+        if (outline_json is None):
+            raise Exception
+        approval_status = ask_approval()
+    approval_status = False
     # write outline to file
     logger.info("Writing outline to file")
     outline_filename = f"output/{timestamp}_{filename_suffix}_3_outline.json"
@@ -66,14 +74,12 @@ def main():
     outline_qa_report = generate_outline_qa_report(
         llm, video_idea_json, outline_json)
     logger.debug(outline_qa_report)
-    if (outline_qa_report['decision'] == "fail"):
-        logger.info("Outline QA failed: %s", outline_qa_report["reason"])
-        raise Exception
 
-    # write outline QA report to file
     logger.info("Writing outline QA report to file")
     outline_qa_filename = f"output/{timestamp}_{filename_suffix}_4_outline_qa.json"
     write_json(outline_qa_report, outline_qa_filename)
+    if (outline_qa_report is None):
+        raise Exception
 
     # Correct outline based on QA findings
     logger.info("Correcting outline based on QA feedback")
@@ -81,16 +87,20 @@ def main():
         llm, outline_qa_report, outline_json)
     outline_final_filename = f"output/{timestamp}_{filename_suffix}_5_outline_final.json"
     write_json(outline_final_json, outline_final_filename)
+    if (outline_final_json is None):
+        raise Exception
 
     # Generate video script
     video_script = None
-    while video_script is None:
-        logger.info("Generating script")
-        video_script = generate_video_script(llm, outline_final_json)
-    # final_script_markdown = video_script_json.get("script_markdown", "").strip()
+    while approval_status is False:
+        while video_script is None:
+            logger.info("Generating script")
+            video_script = generate_video_script(llm, outline_final_json)
+        approval_status = ask_approval()
 
     logger.info("Script generated.")
-
+    logger.debug(video_script)
+    approval_status = False
     # write script to file
     logger.info("Writing script to file")
     script_filename = f"output/{timestamp}_{filename_suffix}_6_script.md"
@@ -106,6 +116,16 @@ def main():
     script_qa_filename = f"output/{timestamp}_{filename_suffix}_7_script_qa.json"
     write_json(script_qa_response, script_qa_filename)
 
+   # Correct script based on QA findings
+
+    video_script_final = None
+    while video_script_final is None:
+        logger.info("Rewriting script with QA corrections")
+        video_script_final = generate_script_final(
+            llm, script_qa_response, video_script)
+    # write corrected script to file
+    final_script_filename = f"output/{timestamp}_{filename_suffix}_8_script_final.md"
+    write_markdown(video_script_final, final_script_filename)
 
 if __name__ == "__main__":
     main()
