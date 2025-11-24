@@ -29,7 +29,7 @@ IDEATION_PROMPT_TEMPLATE_TEXT = """
                 "topic": "{topic}",
                 "domain": "{domain}",
                 "level": "{level}",
-                "hook": "<string: 2-sentence hook>",
+                "hook": "<string: punchy, provocative hook under 50 words that grabs attention>",
                 "tags": <list of tags>,
                 "tools": <list of tools (if applicable)>,
                 "objectives": <list of objectives or outcomes>,
@@ -82,7 +82,6 @@ OUTLINE_PROMPT_TEMPLATE = """
         {{
             "title": "{title}",
             "domain": "{domain}",
-            "tools": {tools},
             "level": "{level}",
             "hook": "{hook}",
             "tags": {tags},
@@ -203,6 +202,8 @@ SCRIPT_PROMPT_TEMPLATE_TEXT = """
         - Validate required keys before composing the script.
         - Use clear, consistent headings
         - Write in the style of Ben Piper: Direct, clear, conversational, explanatory, authoritative
+        - Use smooth transitional phrases between sections to maintain flow
+        - Capitalize words that should be emphasized in speech
         - Be thorough, comprehensive, detailed, and complete
         - Ensure all content is recent and up-to-date
         - Ensure the script you generate is consistent with the preceding sections in terms of tone, formatting, and flow
@@ -224,16 +225,30 @@ SCRIPT_PROMPT_TEMPLATE_TEXT = """
 SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
     Analyze the input and produce concise, actionable suggestions in a report with the following sections:
 
-    - Correctness: identify major factual errors. For each issue include why it is incorrect (brief explanation).
+    - Correctness
+      -Identify major factual errors only
+      - Do not include matters of opinion
+      - For each issue include why it is incorrect (brief explanation).
+      - Do not contradict the title
 
-    - Completeness and Structure: The script should be a complete script, not a draft or outline. List missing points, structural problems, incomplete sentences, or logical gaps to be corrected.
+    - Completeness and Structure
+      - The script should be a complete script, not a draft or outline
+      - List missing points, structural problems, incomplete sentences, or logical gaps to be corrected
+      - There should be no bullets or tables
+      - The script must have no incomplete sentences.
 
-    - Audience Fit: whether content matches the intended audience. Do not mention inclusivity.
-
-    - Score: PASS or FAIL
+    - Audience Fit
+      - whether content matches the intended audience
+      - Do not mention inclusivity
 
     ## Output
-    Return one JSON object.
+    Return one JSON object structured as follows:
+
+    {{
+      "correctness": "<string: analysis of correctness>",
+      "completeness": "<string: analysis of completeness and structure>",
+      "audience_fit": "<string: analysis of audience fit>",
+    }}
 
     Begin the analysis now on the following content:
 
@@ -247,9 +262,9 @@ SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
 # --- Prompt: Generate final script based on QA feedback ---
 SCRIPT_FINAL_PROMPT_TEMPLATE_TEXT = """
         You will be given a markdown script and a QA report with suggestions for improvement.
+        
         Guidelines:
-        - Do not use bullets or numbered points
-        - Do not use tables
+        - Implement the QA suggestions only. Do not make any other changes to the script.
         - Return the corrected script in markdown format.
 
         ## Output Format
