@@ -1,4 +1,3 @@
-
 # --- Prompt: Generate Video Idea ---
 IDEATION_PROMPT_TEMPLATE_TEXT = """
         Thoughtfully develop the following content idea:
@@ -59,7 +58,6 @@ IDEATION_QA_PROMPT_TEMPLATE_TEXT = """
         ## Input
         {{
                 "title": "{title}",
-                "title_contrarian": "{title_contrarian}",
                 "topic": {topic},
                 "domain": "{domain}",
                 "level": "{level}",
@@ -114,6 +112,12 @@ OUTLINE_PROMPT_TEMPLATE = """
         - Return a JSON object structured as:
         
         {{
+            "meta":[
+            {{
+            "title": "{title}",
+            "level": "{level}",
+        }}
+            ],
             "sections": [
             {{ "name": "<string>", "content": [<string>, ...] }}
             ]
