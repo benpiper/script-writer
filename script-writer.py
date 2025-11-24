@@ -15,6 +15,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("script_writer")
 
 
+import os
+from slugify import slugify
+
 class ScriptWriter:
     def __init__(self, topic, domain, level, model):
         self.topic = topic
@@ -24,6 +27,11 @@ class ScriptWriter:
         self.timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         self.llm = get_llm(self.model)
         self.filename_suffix = None
+        
+        # Create output directory
+        topic_slug = slugify(self.topic)
+        self.output_dir = f"output/{self.timestamp}_{topic_slug}"
+        os.makedirs(self.output_dir, exist_ok=True)
 
     def run(self):
         logger.debug("Starting at %s", self.timestamp)
@@ -36,7 +44,7 @@ class ScriptWriter:
         selected_title = select_title(video_idea_json)
         video_idea_json['title'] = selected_title
         
-        self.filename_suffix = video_idea_json['title'].replace(" ", "-").lower()
+        self.filename_suffix = slugify(video_idea_json['title'])
         
         self.write_artifact(video_idea_json, "1_idea.json")
 
@@ -145,7 +153,7 @@ class ScriptWriter:
         return video_script_final
 
     def write_artifact(self, data, suffix, is_markdown=False):
-        filename = f"output/{self.timestamp}_{self.filename_suffix}_{suffix}"
+        filename = os.path.join(self.output_dir, suffix)
         logger.info(f"Writing to {filename}")
         if is_markdown:
             write_markdown(data, filename)
