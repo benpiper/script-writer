@@ -28,6 +28,27 @@ To see all available options:
 uv run script-writer.py --help
 ```
 
+## Features
+
+- **CLI Arguments**: Easily customize topic, domain, level, and model via command-line flags.
+- **Interactive Title Selection**: Choose from 6 generated title options (Original, Contrarian, Descriptive, Problem/Solution, How-To, Curiosity) with a 10-second timeout.
+- **Organized Output**: Each run creates a unique, timestamped subfolder in the `output/` directory containing all generated artifacts (JSON ideas, outlines, scripts).
+- **Robust Error Handling**: The script gracefully handles errors, including network issues and invalid generation, with automatic retries and clear error messages.
+- **SEO-Friendly Naming**: Output folders and files use clean, slugified names.
+
+## Output
+
+All generated files are saved in `output/<timestamp>_<topic-slug>/`.
+Artifacts include:
+1. `1_idea.json`: Initial video idea.
+2. `2_idea_qa.json`: Refined idea after QA.
+3. `3_outline.json`: Generated video outline.
+4. `4_outline_qa.json`: Outline QA report.
+5. `5_outline_final.json`: Finalized outline.
+6. `6_script.md`: First draft of the script.
+7. `7_script_qa.json`: Script QA report.
+8. `8_script_final.md`: Final polished script.
+
 ## Prompt engineering
 
 Sample system prompt:
