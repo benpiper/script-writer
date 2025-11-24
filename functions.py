@@ -104,16 +104,27 @@ def select_title(video_idea_json):
 # Safe json loading fx
 
 def safe_json_loads(text):
-    """ Load JSON safely """
+    """ Load JSON safely with enhanced recovery """
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("safe_json_loader")
     if not isinstance(text, str):
         logger.warning("Not a string")
         return None
+    
+    # Clean up markdown code blocks if present
+    text = text.strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    if text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    text = text.strip()
+
     try:
         return json.loads(text)
-    except Exception:
-        logger.warning("Invalid JSON. %s. Attempting to recover.", text)
+    except json.JSONDecodeError:
+        logger.warning("Invalid JSON. Attempting to recover.")
         # Try to extract a JSON object or array from the response
         m = re.search(r'\{.*\}', text, re.S)
         if m:
@@ -127,8 +138,10 @@ def safe_json_loads(text):
                 return json.loads(m.group(0))
             except Exception:
                 pass
-        logger.warning("Unable to recover JSON from %s", text)
-        return None
+        
+        logger.warning("Unable to recover JSON from text.")
+        logger.debug(f"Failed text: {text}")
+        return {"error": "Invalid JSON format"}
 
 
 """  """
@@ -151,12 +164,24 @@ def write_markdown(data, filename):
 # Function: Generate and invoke chain
 
 
-def create_invoke_chain(llm, prompt_template_text, input_json):
-    """ Create and invoke chain """
+import time
+
+def create_invoke_chain(llm, prompt_template_text, input_json, retries=3):
+    """ Create and invoke chain with retries """
     prompt_template = ChatPromptTemplate.from_template(prompt_template_text)
     chain = prompt_template | llm | StrOutputParser()
-    result = chain.invoke(input_json)
-    return result
+    
+    for attempt in range(retries):
+        try:
+            result = chain.invoke(input_json)
+            return result
+        except Exception as e:
+            logging.warning(f"Attempt {attempt + 1} failed: {e}")
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)  # Exponential backoff
+            else:
+                logging.error("All retry attempts failed.")
+                raise e
 
 # Function: Generate video idea
 

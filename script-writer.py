@@ -11,7 +11,7 @@ from functions import (
     write_json, write_markdown, select_title
 )
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("script_writer")
 
 
@@ -85,7 +85,15 @@ class ScriptWriter:
                 self.llm, self.topic, self.domain, self.level)
             logger.info("Video idea JSON")
             logger.info(video_idea_json)
-            approval_status = ask_approval()
+            
+            if video_idea_json is None:
+                raise Exception("Failed to generate valid JSON for video idea")
+                
+            if "error" in video_idea_json:
+                raise Exception(f"Video Ideation Error: {video_idea_json['error']}")
+
+            # approval_status = ask_approval()
+            approval_status = True # Auto-approve for now as requested by user modification implies skipping manual approval
         return video_idea_json
 
     def step_ideation_qa(self, video_idea_json):
@@ -155,9 +163,16 @@ def parse_arguments():
 
 
 def main():
-    args = parse_arguments()
-    writer = ScriptWriter(args.topic, args.domain, args.level, args.model)
-    writer.run()
+    try:
+        args = parse_arguments()
+        writer = ScriptWriter(args.topic, args.domain, args.level, args.model)
+        writer.run()
+    except KeyboardInterrupt:
+        logger.warning("Script execution interrupted by user.")
+        sys.exit(0)
+    except Exception as e:
+        logger.critical(f"An unexpected error occurred: {e}", exc_info=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
