@@ -85,11 +85,11 @@ class ScriptWriter:
         if outline_final_json is None:
             raise Exception("Error in Final Outline")
 
-        video_script = self.step_script(outline_final_json)
-        self.write_artifact(video_script, "6_script.md", is_markdown=True)
+        script_md, sections_data = self.step_script(outline_final_json)
+        self.write_artifact(script_md, "6_script.md", is_markdown=True)
 
-        # script_qa_response = self.step_script_qa(video_script, video_idea_json)
-        # self.write_artifact(script_qa_response, "7_script_qa.json")
+        script_qa_response = self.step_script_qa(sections_data, video_idea_json)
+        self.write_artifact(script_qa_response, "7_script_qa.json")
 
     def step_ideation(self):
         logger.info("Generating video idea")
@@ -137,20 +137,23 @@ class ScriptWriter:
 
     def step_script(self, outline_final_json):
         approval_status = False
-        video_script = None
+        script_md = None
+        sections_data = None
         while not approval_status:
-            while video_script is None:
+            while script_md is None:
                 logger.info("Generating script")
-                video_script = generate_video_script(self.llm, outline_final_json)
+                script_md, sections_data = generate_video_script(
+                    self.llm, outline_final_json
+                )
             approval_status = ask_approval()
         logger.info("Script generated.")
-        logger.debug(video_script)
-        return video_script
+        logger.debug(script_md)
+        return script_md, sections_data
 
-    def step_script_qa(self, video_script, video_idea_json):
+    def step_script_qa(self, video_script_sections, video_idea_json):
         logger.info("Starting script QA")
         return generate_qa_report(
-            self.llm, video_idea_json["title"], self.level, video_script
+            self.llm, video_idea_json["title"], self.level, video_script_sections
         )
 
     def write_artifact(self, data, suffix, is_markdown=False):

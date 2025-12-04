@@ -291,7 +291,7 @@ SUMMARIZE_SECTION_PROMPT_TEMPLATE_TEXT = """
 
 # --- Prompt: QA Analysis ---
 SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
-    Analyze the following script content and produce a concise, actionable QA report.
+    Analyze the following script section and produce a concise, actionable QA report.
 
     ## Input Content to Analyze
     Title: {title}
@@ -308,7 +308,7 @@ SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
        - Do not contradict the title.
     
     2. Completeness and Structure
-       - The script should be a complete script, not a draft or outline.
+       - The script section should be a complete section, not a draft or outline.
        - List missing points, structural problems, incomplete sentences, or logical gaps.
        - Ensure no bullets or tables are used.
        - Ensure no incomplete sentences.

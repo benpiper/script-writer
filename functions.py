@@ -333,6 +333,7 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
 
     # Iterate through sections, accumulating script
     running_summary = "No previous content."
+    sections_data = []
 
     for i, section in enumerate(outline.get("sections", [])):
         section_name = section.get("name", "")
@@ -360,6 +361,7 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
         )
 
         full_script += f"\n\n{section_script}"
+        sections_data.append({"name": section_name, "script": section_script})
 
         # Update summary for next iteration
         logging.info(f"Summarizing section: {section_name}")
@@ -369,16 +371,16 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
         else:
             running_summary += f"\n\n{new_summary}"
 
-    return full_script
+    return full_script, sections_data
 
 
 # Function: Generate QA for script
 
 
 def generate_qa_report(
-    llm: Union[ChatOpenAI, ChatOllama], title: str, level: str, script_md: str
+    llm: Union[ChatOpenAI, ChatOllama], title: str, level: str, sections_data: list
 ):
-    """Generate QA report from script"""
+    """Generate QA report from script sections"""
     SCRIPT_QA_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
         SCRIPT_QA_PROMPT_TEMPLATE_TEXT
     )
@@ -386,8 +388,21 @@ def generate_qa_report(
     # --- Construct the script QA chain ---
     script_qa_chain = SCRIPT_QA_PROMPT_TEMPLATE | llm | StrOutputParser()
 
-    script_qa_response = script_qa_chain.invoke(
-        {"title": title, "level": level, "content": script_md}
-    )
+    aggregated_qa = {"sections": []}
 
-    return safe_json_loads(script_qa_response)
+    for section in sections_data:
+        section_name = section["name"]
+        section_script = section["script"]
+
+        logging.info(f"Running QA for section: {section_name}")
+
+        script_qa_response = script_qa_chain.invoke(
+            {"title": title, "level": level, "content": section_script}
+        )
+
+        section_qa = safe_json_loads(script_qa_response)
+        aggregated_qa["sections"].append(
+            {"section_name": section_name, "qa_analysis": section_qa}
+        )
+
+    return aggregated_qa
