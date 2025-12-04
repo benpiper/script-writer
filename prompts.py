@@ -211,7 +211,7 @@ SCRIPT_PROMPT_TEMPLATE_TEXT = """
         - Start by introducing a concept or term related to the topic.
         - Validate required keys before composing the script.
         - Use clear, consistent headings
-        - Write in the style of Ben Piper: Direct, clear, conversational, explanatory, authoritative
+        - Style: Direct, clear, conversational, explanatory, authoritative
         - Use smooth transitional phrases between sections to maintain flow
         - Capitalize words that should be emphasized in speech
         - Be thorough, comprehensive, detailed, and complete
