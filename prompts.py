@@ -136,7 +136,7 @@ OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
 
     - Overall quality judgment (accurate/inaccurate, consistent/inconsistent, clear/unclear).
 
-    - Correctness: Identify any factual or logical errors.
+    - Correctness: Identify any factual or logical errors. If the title references something that you aren't familiar with, assume the title is correct and that the reference is from after your training cutoff date.
 
     - Completeness and Structure: The outline should be complete and thorough. There should be no missing points, structural problems, or logical gaps.
 
@@ -220,6 +220,47 @@ SCRIPT_PROMPT_TEMPLATE_TEXT = """
         - Define all technical terms
         - Do not include cues for gestures or visuals
     """
+
+# --- Prompt: Generate script section ---
+SCRIPT_SECTION_PROMPT_TEMPLATE_TEXT = """
+        You are writing a video script section by section.
+        
+        ## Context
+        Title: {title}
+        Audience Level: {level}
+        
+        ## Full Outline
+        {outline}
+        
+        ## Preceding Script
+        {preceding_script}
+        
+        ## Current Section to Write
+        Name: {section_name}
+        Content Points:
+        {section_content}
+        
+        ## Instructions
+        - Write the script for the "Current Section" ONLY.
+        - Ensure smooth transition from the "Preceding Script".
+        - Maintain the same tone and style (Ben Piper: Direct, clear, conversational, authoritative).
+        - Capitalize words that should be emphasized in speech
+        - Avoid unnecessary repetition
+        - Add explanatory comments to any code
+        - The script must be a spoken narrative. Use complete sentences.
+        - Do not use bullets or numbered points
+        - Do not use tables
+        - Do not use emojis
+        - Expand all acronyms in parentheses
+        - Define all technical terms
+        - Do not include cues for gestures or visuals
+        - Cover all points in "Content Points".
+        - Use markdown formatting.
+        - Use clear, consistent headings
+        - Do not repeat the title or intro if already covered (unless this IS the intro).
+        - Do not output the "Preceding Script" again.
+        - Output ONLY the new script content for this section.
+"""
 
 # --- Prompt: QA Analysis ---
 SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
