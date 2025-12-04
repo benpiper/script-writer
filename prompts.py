@@ -248,6 +248,7 @@ SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
       "correctness": "<string: analysis of correctness>",
       "completeness": "<string: analysis of completeness and structure>",
       "audience_fit": "<string: analysis of audience fit>",
+      "score": "<PASS or FAIL>"
     }}
 
     Begin the analysis now on the following content:
