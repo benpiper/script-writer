@@ -120,7 +120,7 @@ def select_title(video_idea_json):
 
 def safe_json_loads(text):
     """Load JSON safely with enhanced recovery"""
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger("safe_json_loader")
     if not isinstance(text, str):
         logger.warning("Not a string")

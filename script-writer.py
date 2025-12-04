@@ -20,7 +20,7 @@ from functions import (
     select_title,
 )
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("script_writer")
 
 
