@@ -40,6 +40,9 @@ IDEATION_PROMPT_TEMPLATE_TEXT = """
         - Do not use markdown
         - Do not use emojis
         - SEO-optimize all titles
+        - Return ONLY valid JSON.
+        - Do not include any text before or after the JSON.
+        - Ensure all keys and string values are enclosed in double quotes.
 
         After generating the output, review it to ensure all requirements and formatting constraints are fulfilled.
         If validation fails, self-correct and return a valid JSON object.
@@ -98,6 +101,9 @@ OUTLINE_PROMPT_TEMPLATE = """
         - The outline must be detailed, comprehensive, elaborate, and complete.
         - Do not use emojis
         - For the final section, refrain from including next steps, recommendations, or external/additional resources.
+        - Return ONLY valid JSON.
+        - Do not include any text before or after the JSON.
+        - Ensure all keys and string values are enclosed in double quotes.
 
         If 'title' or 'tools' fields are missing or not the correct type, respond with the following JSON object:
         
@@ -291,6 +297,11 @@ SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
       "audience_fit": "<string: analysis of audience fit>",
     }}
 
+    - Return ONLY valid JSON.
+    - Do not include any text before or after the JSON.
+    - Ensure all keys and string values are enclosed in double quotes.
+    - Do not use markdown formatting.
+
     Begin the analysis now on the following content:
 
     ## Input
@@ -298,21 +309,4 @@ SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
     - Audience level: {level}
     - Content:
     {content}
-"""
-
-# --- Prompt: Generate final script based on QA feedback ---
-SCRIPT_FINAL_PROMPT_TEMPLATE_TEXT = """
-        You will be given a markdown script and a QA report with suggestions for improvement.
-        
-        Guidelines:
-        - Implement the QA suggestions only. Do not make any other changes to the script.
-        - Return the corrected script in markdown format.
-
-        ## Output Format
-        - Markdown
-        
-        ## Inputs
-        - QA Report: {script_qa_report}
-        - Script: {script}
-
 """

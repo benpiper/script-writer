@@ -20,7 +20,6 @@ from prompts import (
     SCRIPT_QA_PROMPT_TEMPLATE_TEXT,
     OUTLINE_QA_PROMPT_TEMPLATE_TEXT,
     OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT,
-    SCRIPT_FINAL_PROMPT_TEMPLATE_TEXT,
     SCRIPT_SECTION_PROMPT_TEMPLATE_TEXT,
 )
 
@@ -142,16 +141,29 @@ def safe_json_loads(text):
     except json.JSONDecodeError:
         logger.warning("Invalid JSON. Attempting to recover.")
         # Try to extract a JSON object or array from the response
-        m = re.search(r"\{.*\}", text, re.S)
-        if m:
+        # Find the first '{' and the last '}'
+        m_obj = re.search(r"\{.*\}", text, re.S)
+        # Find the first '[' and the last ']'
+        m_arr = re.search(r"\[.*\]", text, re.S)
+
+        candidates = []
+        if m_obj:
+            candidates.append(m_obj.group(0))
+        if m_arr:
+            candidates.append(m_arr.group(0))
+
+        for candidate in candidates:
             try:
-                return json.loads(m.group(0))
-            except Exception:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
                 pass
-        m = re.search(r"\[.*\]", text, re.S)
-        if m:
+
+        # Last ditch effort: try to fix common errors (like trailing commas)
+        if m_obj:
             try:
-                return json.loads(m.group(0))
+                # Remove trailing commas before closing braces/brackets
+                fixed_text = re.sub(r",\s*([\]\}])", r"\1", m_obj.group(0))
+                return json.loads(fixed_text)
             except Exception:
                 pass
 
@@ -301,7 +313,7 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
     # Iterate through sections, accumulating script
     for section in outline.get("sections", []):
         section_name = section.get("name", "")
-        section_content = "\\n".join(section.get("content", []))
+        section_content = "\n".join(section.get("content", []))
 
         logging.info(f"Generating script for section: {section_name}")
 
@@ -316,7 +328,7 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
             }
         )
 
-        full_script += f"\\n\\n{section_script}"
+        full_script += f"\n\n{section_script}"
 
     return full_script
 
@@ -340,20 +352,3 @@ def generate_qa_report(
     )
 
     return safe_json_loads(script_qa_response)
-
-
-def generate_script_final(
-    llm: Union[ChatOpenAI, ChatOllama], script_qa_response: str, video_script: str
-):
-    """Correct video script using QA feedback"""
-
-    SCRIPT_FINAL_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
-        SCRIPT_FINAL_PROMPT_TEMPLATE_TEXT
-    )
-
-    # --- Construct the script chain ---
-    script_chain = SCRIPT_FINAL_PROMPT_TEMPLATE | llm | StrOutputParser()
-    chain_input = {"script_qa_report": script_qa_response, "script": video_script}
-    script = script_chain.invoke(chain_input)
-    logging.debug("Generate corrected script response: %s", script)
-    return script
