@@ -37,8 +37,8 @@ IDEATION_PROMPT_TEMPLATE_TEXT = """
 
         Output Constraints:
         - Return only one JSON object per response.
+        - Use only ASCII characters
         - Do not use markdown
-        - Do not use emojis
         - SEO-optimize all titles
         - Return ONLY valid JSON.
         - Do not include any text before or after the JSON.
@@ -242,8 +242,11 @@ SCRIPT_SECTION_PROMPT_TEMPLATE_TEXT = """
         ## Full Outline
         {outline}
         
-        ## Preceding Script
-        {preceding_script}
+        ## Context Summary (What has happened so far)
+        {context_summary}
+        
+        ## Recent Script Content (Last few paragraphs)
+        {recent_script_content}
         
         ## Current Section to Write
         Name: {section_name}
@@ -252,7 +255,7 @@ SCRIPT_SECTION_PROMPT_TEMPLATE_TEXT = """
         
         ## Instructions
         - Write the script for the "Current Section" ONLY.
-        - Ensure smooth transition from the "Preceding Script".
+        - Ensure smooth transition from the "Recent Script Content", keeping the "Context Summary" in mind.
         - Maintain the same tone and style (Ben Piper: Direct, clear, conversational, authoritative).
         - Capitalize words that should be emphasized in speech
         - Avoid unnecessary repetition
@@ -268,8 +271,22 @@ SCRIPT_SECTION_PROMPT_TEMPLATE_TEXT = """
         - Use markdown formatting.
         - Use clear, consistent headings
         - Do not repeat the title or intro if already covered (unless this IS the intro).
-        - Do not output the "Preceding Script" again.
+        - Do not output the "Recent Script Content" or "Context Summary" again.
         - Output ONLY the new script content for this section.
+"""
+
+# --- Prompt: Summarize Script Section ---
+SUMMARIZE_SECTION_PROMPT_TEMPLATE_TEXT = """
+    Summarize the following script section.
+    
+    ## Input Script Section
+    {section_script}
+    
+    ## Instructions
+    - Create a concise summary of the key points covered in this section.
+    - Focus on information that is relevant for maintaining continuity in subsequent sections (e.g., concepts introduced, terms defined, current state of a demo).
+    - Do not include minor details or filler.
+    - The summary should be a single paragraph.
 """
 
 # --- Prompt: QA Analysis ---

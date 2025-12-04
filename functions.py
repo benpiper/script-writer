@@ -5,22 +5,22 @@ import json
 import re
 import logging
 import signal
+import time
 from dotenv import load_dotenv
 from typing import Dict, Union
-from datetime import datetime, timezone
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
+from langchain_core.output_parsers import StrOutputParser
 from langchain_ollama import ChatOllama
 from prompts import (
     IDEATION_PROMPT_TEMPLATE_TEXT,
     IDEATION_QA_PROMPT_TEMPLATE_TEXT,
     OUTLINE_PROMPT_TEMPLATE,
-    SCRIPT_PROMPT_TEMPLATE_TEXT,
     SCRIPT_QA_PROMPT_TEMPLATE_TEXT,
     OUTLINE_QA_PROMPT_TEMPLATE_TEXT,
     OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT,
     SCRIPT_SECTION_PROMPT_TEMPLATE_TEXT,
+    SUMMARIZE_SECTION_PROMPT_TEMPLATE_TEXT,
 )
 
 # Helper functions
@@ -207,9 +207,6 @@ def write_markdown(data, filename):
 # Function: Generate and invoke chain
 
 
-import time
-
-
 def create_invoke_chain(llm, prompt_template_text, input_json, retries=3):
     """Create and invoke chain with retries"""
     prompt_template = ChatPromptTemplate.from_template(prompt_template_text)
@@ -304,6 +301,17 @@ def generate_outline_final(llm, outline_qa_report, outline_json):
     return safe_json_loads(outline_final)
 
 
+def summarize_script_section(llm: Union[ChatOpenAI, ChatOllama], section_script: str):
+    """Summarize a script section for context"""
+    SUMMARIZE_PROMPT = ChatPromptTemplate.from_template(
+        SUMMARIZE_SECTION_PROMPT_TEMPLATE_TEXT
+    )
+    summary_chain = SUMMARIZE_PROMPT | llm | StrOutputParser()
+    summary = summary_chain.invoke({"section_script": section_script})
+    logging.debug(f"Section Summary: {summary}")
+    return summary
+
+
 def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
     """Generate video script from outline (json) iteratively"""
 
@@ -324,24 +332,42 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
         level = outline["meta"][0].get("level", "")
 
     # Iterate through sections, accumulating script
-    for section in outline.get("sections", []):
+    running_summary = "No previous content."
+
+    for i, section in enumerate(outline.get("sections", [])):
         section_name = section.get("name", "")
         section_content = "\n".join(section.get("content", []))
 
         logging.info(f"Generating script for section: {section_name}")
+
+        # Get recent script content (last ~2000 chars) for immediate context
+        recent_script_content = (
+            full_script[-2000:] if len(full_script) > 2000 else full_script
+        )
+        if not recent_script_content:
+            recent_script_content = "No preceding script."
 
         section_script = script_chain.invoke(
             {
                 "title": title,
                 "level": level,
                 "outline": json.dumps(outline, indent=2),
-                "preceding_script": full_script,
+                "context_summary": running_summary,
+                "recent_script_content": recent_script_content,
                 "section_name": section_name,
                 "section_content": section_content,
             }
         )
 
         full_script += f"\n\n{section_script}"
+
+        # Update summary for next iteration
+        logging.info(f"Summarizing section: {section_name}")
+        new_summary = summarize_script_section(llm, section_script)
+        if running_summary == "No previous content.":
+            running_summary = new_summary
+        else:
+            running_summary += f"\n\n{new_summary}"
 
     return full_script
 
