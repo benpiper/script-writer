@@ -140,6 +140,19 @@ def safe_json_loads(text):
         return json.loads(text)
     except json.JSONDecodeError:
         logger.warning("Invalid JSON. Attempting to recover.")
+
+        # Attempt 1: Fix invalid escapes (common in Windows paths)
+        # Match double backslashes (keep them) OR single backslashes not followed by valid escape chars (escape them)
+        fixed_text = re.sub(
+            r'(\\\\)|(\\(?!["\\/bfnrtu]))',
+            lambda m: m.group(1) if m.group(1) else r"\\",
+            text,
+        )
+        try:
+            return json.loads(fixed_text)
+        except json.JSONDecodeError:
+            pass
+
         # Try to extract a JSON object or array from the response
         # Find the first '{' and the last '}'
         m_obj = re.search(r"\{.*\}", text, re.S)

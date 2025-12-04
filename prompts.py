@@ -79,7 +79,7 @@ IDEATION_QA_PROMPT_TEMPLATE_TEXT = """
 # --- Prompt: Generate Outline ---
 OUTLINE_PROMPT_TEMPLATE = """
         Begin with a checklist of the main planning and sequencing steps you will follow before creating the outline. Do not output this checklist.
-        Create a comprehensive, detailed outline using the structured input provided.
+        Create an outline using the structured input provided.
 
         Input JSON structure:
         {{
@@ -98,12 +98,14 @@ OUTLINE_PROMPT_TEMPLATE = """
         - Exclude self-paced exercises; all demonstrations should be incorporated within the outline.
         - Carefully design the outline to ensure it fully addresses the content indicated in the input.
         - Arrange all sections and demonstration steps in a clear, logical sequence.
-        - The outline must be detailed, comprehensive, elaborate, and complete.
+        - The outline must be comprehensive and complete.
+        - The outline must be detailed but concise enough to fit within output limits.
         - Do not use emojis
         - For the final section, refrain from including next steps, recommendations, or external/additional resources.
         - Return ONLY valid JSON.
         - Do not include any text before or after the JSON.
         - Ensure all keys and string values are enclosed in double quotes.
+        - **CRITICAL**: The 'sections' array must be a FLAT list of objects. DO NOT nest sections inside other sections.
 
         If 'title' or 'tools' fields are missing or not the correct type, respond with the following JSON object:
         
@@ -124,14 +126,16 @@ OUTLINE_PROMPT_TEMPLATE = """
         }}
             ],
             "sections": [
+            {{ "name": "<string>", "content": [<string>, ...] }},
             {{ "name": "<string>", "content": [<string>, ...] }}
             ]
         }}
         
-        - 'sections' should be an array of section objects.
+        - 'sections' should be a single FLAT array of section objects.
         - Each section object includes:
         - 'name': the title of the section (string)
         - 'content': an array of strings detailing the main points, demonstration steps, or explanations.
+        - DO NOT add any other keys like 'sections' inside a section object.
 
         """
 
@@ -270,43 +274,44 @@ SCRIPT_SECTION_PROMPT_TEMPLATE_TEXT = """
 
 # --- Prompt: QA Analysis ---
 SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
-    Analyze the input and produce concise, actionable suggestions in a report with the following sections:
+    Analyze the following script content and produce a concise, actionable QA report.
 
-    - Correctness
-      -Identify major factual errors only
-      - Do not include matters of opinion
-      - For each issue include why it is incorrect (brief explanation).
-      - Do not contradict the title
+    ## Input Content to Analyze
+    Title: {title}
+    Audience Level: {level}
+    
+    <script_content>
+    {content}
+    </script_content>
 
-    - Completeness and Structure
-      - The script should be a complete script, not a draft or outline
-      - List missing points, structural problems, incomplete sentences, or logical gaps to be corrected
-      - There should be no bullets or tables
-      - The script must have no incomplete sentences.
+    ## Analysis Criteria
+    1. Correctness
+       - Identify major factual errors only.
+       - Do not include matters of opinion.
+       - Do not contradict the title.
+    
+    2. Completeness and Structure
+       - The script should be a complete script, not a draft or outline.
+       - List missing points, structural problems, incomplete sentences, or logical gaps.
+       - Ensure no bullets or tables are used.
+       - Ensure no incomplete sentences.
+    
+    3. Audience Fit
+       - Verify content matches the intended audience level.
+       - Do not mention inclusivity.
 
-    - Audience Fit
-      - whether content matches the intended audience
-      - Do not mention inclusivity
-
-    ## Output
-    Return one JSON object structured as follows:
-
+    ## Output Format
+    Return ONE JSON object. Do not include any text before or after the JSON.
+    
     {{
       "correctness": "<string: analysis of correctness>",
       "completeness": "<string: analysis of completeness and structure>",
-      "audience_fit": "<string: analysis of audience fit>",
+      "audience_fit": "<string: analysis of audience fit>"
     }}
 
-    - Return ONLY valid JSON.
-    - Do not include any text before or after the JSON.
+    ## Final Instructions
+    - Output ONLY valid JSON.
     - Ensure all keys and string values are enclosed in double quotes.
     - Do not use markdown formatting.
-
-    Begin the analysis now on the following content:
-
-    ## Input
-    - Title: {title}
-    - Audience level: {level}
-    - Content:
-    {content}
+    - Analyze the <script_content> provided above and generate the JSON report now.
 """

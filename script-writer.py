@@ -88,11 +88,8 @@ class ScriptWriter:
         video_script = self.step_script(outline_final_json)
         self.write_artifact(video_script, "6_script.md", is_markdown=True)
 
-        script_qa_response = self.step_script_qa(video_script, video_idea_json)
-        self.write_artifact(script_qa_response, "7_script_qa.json")
-
-        script_qa_response = self.step_script_qa(video_script, video_idea_json)
-        self.write_artifact(script_qa_response, "7_script_qa.json")
+        # script_qa_response = self.step_script_qa(video_script, video_idea_json)
+        # self.write_artifact(script_qa_response, "7_script_qa.json")
 
     def step_ideation(self):
         logger.info("Generating video idea")
