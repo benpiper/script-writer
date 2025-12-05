@@ -283,10 +283,11 @@ SCRIPT_SECTION_PROMPT_TEMPLATE_TEXT = """
         ## Instructions
         - Write the script for the "Current Section" ONLY.
         - Ensure smooth transition from the "Recent Script Content", keeping the "Context Summary" in mind.
-        - Maintain the same tone and style (Ben Piper: Direct, clear, conversational, authoritative).
-        - Capitalize words that should be emphasized in speech
+        - Maintain the same tone and style (Direct, clear, conversational, authoritative).
+        - Capitalize words that should be emphasized in speech. Do not bold or italicize words.
         - Avoid unnecessary repetition
         - Add explanatory comments to any code
+        - Provide filenames for code files
         - The script must be a spoken narrative. Use complete sentences.
         - Do not use bullets or numbered points
         - Do not use tables
@@ -329,18 +330,12 @@ SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
     </script_content>
 
     ## Analysis Criteria
-    1. Correctness
-       - Identify major factual errors only.
-       - Do not include matters of opinion.
-       - Do not contradict the title.
     
-    2. Completeness and Structure
-       - The script section should be a complete section, not a draft or outline.
-       - List missing points, structural problems, incomplete sentences, or logical gaps.
+    1. Completeness and Structure
        - Ensure no bullets or tables are used.
        - Ensure no incomplete sentences.
     
-    3. Audience Fit
+    2. Audience Fit
        - Verify content matches the intended audience level.
        - Do not mention inclusivity.
 
@@ -348,7 +343,6 @@ SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
     Return ONE JSON object. Do not include any text before or after the JSON.
     
     {{
-      "correctness": "<string: analysis of correctness>",
       "completeness": "<string: analysis of completeness and structure>",
       "audience_fit": "<string: analysis of audience fit>"
     }}
