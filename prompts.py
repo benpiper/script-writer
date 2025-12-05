@@ -100,12 +100,15 @@ OUTLINE_PROMPT_TEMPLATE = """
         - Arrange all sections and demonstration steps in a clear, logical sequence.
         - The outline must be comprehensive and complete.
         - The outline must be detailed but concise enough to fit within output limits.
-        - Do not use emojis
+        - Do not include code blocks
+        - Use only ASCII characters
         - For the final section, refrain from including next steps, recommendations, or external/additional resources.
         - Return ONLY valid JSON.
         - Do not include any text before or after the JSON.
         - Ensure all keys and string values are enclosed in double quotes.
         - **CRITICAL**: The 'sections' array must be a FLAT list of objects. DO NOT nest sections inside other sections.
+        - **CRITICAL**: Do NOT use string concatenation operators (+) or any other programming syntax inside JSON. Each string must be complete.
+        - If content is long, keep it as one complete string or split into multiple array elements. Never use + to join strings.
 
         If 'title' or 'tools' fields are missing or not the correct type, respond with the following JSON object:
         
@@ -132,12 +135,21 @@ OUTLINE_PROMPT_TEMPLATE = """
         }}
         
         - 'sections' should be a single FLAT array of section objects.
-        - Each section object includes:
+        - **CRITICAL**: Each section object MUST have EXACTLY TWO keys: 'name' and 'content'. NO OTHER KEYS are allowed.
         - 'name': the title of the section (string)
         - 'content': an array of strings detailing the main points, demonstration steps, or explanations.
-        - DO NOT add any other keys like 'sections' inside a section object.
+        - **DO NOT add keys like 'demonstration', 'subsections', 'sections', 'steps', or any other keys besides 'name' and 'content'.**
+        - If you need to include demonstration steps, add them as strings in the 'content' array.
+        
+        Example of a VALID section:
+        {{ "name": "Setting Up Environment", "content": ["Install Python 3.9+", "Run: pip install transformers", "Verify installation: python -c 'import transformers'"] }}
+        
+        Example of INVALID sections (DO NOT DO THIS):
+        {{ "name": "Setup", "content": ["Install Python"], "demonstration": "python --version" }}  // WRONG - extra 'demonstration' key
+        {{ "name": "Setup", "content": ["Install Python"], "steps": ["Step 1", "Step 2"] }}  // WRONG - extra 'steps' key
 
         """
+
 
 # --- Prompt: QA Outline ---
 
@@ -167,6 +179,13 @@ OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
       "consistency": <list of inconsistent or contradictory points>,
     }}
     
+    **JSON Formatting Rules**:
+    - Return ONLY valid JSON. No text before or after.
+    - **CRITICAL**: JSON requires DOUBLE QUOTES (") for all keys and string values. Do NOT use single quotes (').
+    - Do NOT use backticks (`) for code references. Use plain text description instead.
+    - Do NOT include code examples with quotes in strings. Describe code in prose without syntax.
+    - If you must reference code, use descriptive text, not literal syntax.
+    
     Begin the analysis now on the following content:
 
     ## Input
@@ -195,6 +214,14 @@ OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT = """
             {{ "name": "<string>", "content": [<string>, ...] }}
             ]
         }}
+        
+        ## Critical JSON Rules
+        - Return ONLY valid JSON. No text before or after.
+        - Each section object MUST have EXACTLY TWO keys: 'name' and 'content'. NO OTHER KEYS.
+        - **CRITICAL**: Do NOT use string concatenation operators (+) or any programming syntax inside JSON.
+        - Each string in the content array must be complete. If content is long, split into multiple array elements.
+        - Do NOT write: "text1" + "text2" (WRONG)
+        - DO write: "text1", "text2" or "text1 text2" (CORRECT)
 """
 
 # --- Prompt: Generate script ---

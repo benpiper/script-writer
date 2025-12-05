@@ -6,6 +6,8 @@ import re
 import logging
 import signal
 import time
+import functools
+from datetime import datetime
 from dotenv import load_dotenv
 from typing import Dict, Union
 from langchain_openai import ChatOpenAI
@@ -115,74 +117,279 @@ def select_title(video_idea_json):
     return video_idea_json.get("title")
 
 
+# Retry Decorator
+
+
+def retry_with_backoff(max_retries=3, base_delay=1.0, exceptions=(Exception,)):
+    """Decorator to retry a function with exponential backoff
+
+    Args:
+        max_retries: Maximum number of retry attempts
+        base_delay: Initial delay in seconds (doubles each retry)
+        exceptions: Tuple of exceptions to catch and retry
+    """
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            logger = logging.getLogger(func.__name__)
+
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    if attempt == max_retries - 1:
+                        logger.error(
+                            f"All {max_retries} retry attempts failed for {func.__name__}"
+                        )
+                        raise
+
+                    delay = base_delay * (2**attempt)
+                    logger.warning(
+                        f"Attempt {attempt + 1}/{max_retries} failed for {func.__name__}: {str(e)[:100]}. "
+                        f"Retrying in {delay}s..."
+                    )
+                    time.sleep(delay)
+
+        return wrapper
+
+    return decorator
+
+
 # Safe json loading fx
 
 
-def safe_json_loads(text):
-    """Load JSON safely with enhanced recovery"""
+def safe_json_loads(text, context="", save_debug=True):
+    """Load JSON safely with enhanced recovery and debugging
+
+    Args:
+        text: The text to parse as JSON
+        context: Description of what this JSON is for (for debug logging)
+        save_debug: Whether to save failed JSON to debug file
+    """
     logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger("safe_json_loader")
+
+    # Log the raw response with context
+    if context:
+        logger.debug(f"\n{'=' * 60}\nParsing JSON for: {context}\n{'=' * 60}")
+
+    logger.debug(
+        f"Raw response length: {len(text) if isinstance(text, str) else 'N/A'} characters"
+    )
+    logger.debug(f"Raw response preview (first 500 chars):\n{str(text)[:500]}")
+
     if not isinstance(text, str):
-        logger.warning("Not a string")
+        logger.warning(f"Expected string, got {type(text)}")
         return None
+
+    original_text = text  # Keep original for debug file
 
     # Clean up markdown code blocks if present
     text = text.strip()
     if text.startswith("```json"):
+        logger.debug("Removing ```json markdown wrapper")
         text = text[7:]
     if text.startswith("```"):
+        logger.debug("Removing ``` markdown wrapper")
         text = text[3:]
     if text.endswith("```"):
+        logger.debug("Removing trailing ```")
         text = text[:-3]
     text = text.strip()
 
+    # Attempt 1: Direct parsing
     try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        logger.warning("Invalid JSON. Attempting to recover.")
+        result = json.loads(text)
+        logger.debug("✓ Successfully parsed JSON on first attempt")
+        return result
+    except json.JSONDecodeError as e:
+        logger.warning(f"Initial JSON parse failed: {e}")
+        logger.debug(f"Error at line {e.lineno}, column {e.colno}: {e.msg}")
 
-        # Attempt 1: Fix invalid escapes (common in Windows paths)
-        # Match double backslashes (keep them) OR single backslashes not followed by valid escape chars (escape them)
-        fixed_text = re.sub(
-            r'(\\\\)|(\\(?!["\\/bfnrtu]))',
-            lambda m: m.group(1) if m.group(1) else r"\\",
-            text,
+    # Attempt 2: Fix backticks with nested quotes (e.g., `dataset["test"]`)
+    if "`" in text and '"' in text:
+        logger.debug(
+            "Attempting recovery: replacing backticks to prevent nested quote issues"
         )
+        # Replace backticks with single quotes to avoid quote nesting
+        fixed_text = text.replace("`", "'")
         try:
-            return json.loads(fixed_text)
-        except json.JSONDecodeError:
-            pass
+            result = json.loads(fixed_text)
+            logger.debug("✓ Successfully parsed JSON after replacing backticks")
+            return result
+        except json.JSONDecodeError as e:
+            logger.debug(f"Failed after replacing backticks: {e.msg}")
 
-        # Try to extract a JSON object or array from the response
-        # Find the first '{' and the last '}'
-        m_obj = re.search(r"\{.*\}", text, re.S)
-        # Find the first '[' and the last ']'
-        m_arr = re.search(r"\[.*\]", text, re.S)
+    # Attempt 3: Convert Python dict syntax to JSON (single quotes to double quotes)
+    if text.strip().startswith("{") and "'" in text and ":" in text:
+        logger.debug("Attempting recovery: converting Python dict syntax to JSON")
+        # Replace single quotes with double quotes for JSON compliance
+        fixed_text = text.replace("'", '"')
+        try:
+            result = json.loads(fixed_text)
+            logger.debug(
+                "✓ Successfully parsed JSON after converting Python dict syntax"
+            )
+            return result
+        except json.JSONDecodeError as e:
+            logger.debug(f"Failed after Python dict conversion: {e.msg}")
 
-        candidates = []
-        if m_obj:
-            candidates.append(m_obj.group(0))
-        if m_arr:
-            candidates.append(m_arr.group(0))
+    # Attempt 4: Fix string concatenation (e.g., "text1" + "text2")
+    if '" +' in text or "' +" in text:
+        logger.debug("Attempting recovery: removing string concatenation operators")
+        # Remove "+ and +" patterns (with optional whitespace)
+        fixed_text = re.sub(r'"\s*\+\s*"', "", text)  # "text" + "text" -> "texttext"
+        fixed_text = re.sub(
+            r"'\s*\+\s*'", "", fixed_text
+        )  # 'text' + 'text' -> 'texttext'
+        try:
+            result = json.loads(fixed_text)
+            logger.debug(
+                "✓ Successfully parsed JSON after removing string concatenation"
+            )
+            return result
+        except json.JSONDecodeError as e:
+            logger.debug(f"Failed after removing concatenation: {e.msg}")
 
-        for candidate in candidates:
-            try:
-                return json.loads(candidate)
-            except json.JSONDecodeError:
-                pass
+    # Attempt 5: Fix invalid escapes (common in Windows paths)
+    logger.debug("Attempting recovery: fixing invalid escape sequences")
+    fixed_text = re.sub(
+        r'(\\\\)|(\\(?!["\\/ bfnrtu]))',
+        lambda m: m.group(1) if m.group(1) else r"\\",
+        text,
+    )
+    try:
+        result = json.loads(fixed_text)
+        logger.debug("✓ Successfully parsed JSON after fixing escape sequences")
+        return result
+    except json.JSONDecodeError as e:
+        logger.debug(f"Failed after escape fix: {e.msg}")
 
-        # Last ditch effort: try to fix common errors (like trailing commas)
-        if m_obj:
-            try:
-                # Remove trailing commas before closing braces/brackets
-                fixed_text = re.sub(r",\s*([\]\}])", r"\1", m_obj.group(0))
-                return json.loads(fixed_text)
-            except Exception:
-                pass
+    # Attempt 6: Extract JSON object or array from the response
+    logger.debug("Attempting recovery: extracting JSON from surrounding text")
+    m_obj = re.search(r"\{.*\}", text, re.S)
+    m_arr = re.search(r"\[.*\]", text, re.S)
 
-        logger.warning("Unable to recover JSON from text.")
-        logger.debug(f"Failed text: {text}")
-        return {"error": "Invalid JSON format"}
+    candidates = []
+    if m_obj:
+        candidates.append(("object", m_obj.group(0)))
+    if m_arr:
+        candidates.append(("array", m_arr.group(0)))
+
+    for json_type, candidate in candidates:
+        try:
+            result = json.loads(candidate)
+            logger.debug(f"✓ Successfully parsed JSON {json_type} after extraction")
+            return result
+        except json.JSONDecodeError as e:
+            logger.debug(f"Failed to parse extracted {json_type}: {e.msg}")
+
+    # Attempt 7: Fix trailing commas
+    if m_obj:
+        logger.debug("Attempting recovery: removing trailing commas")
+        try:
+            fixed_text = re.sub(r",\s*([\]\}])", r"\1", m_obj.group(0))
+            result = json.loads(fixed_text)
+            logger.debug("✓ Successfully parsed JSON after removing trailing commas")
+            return result
+        except json.JSONDecodeError as e:
+            logger.debug(f"Failed after removing trailing commas: {e.msg}")
+
+    # All attempts failed - save debug file and return error
+    logger.error("✗ All JSON recovery attempts failed")
+
+    if save_debug:
+        try:
+            debug_dir = "debug_json_failures"
+            os.makedirs(debug_dir, exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            context_slug = (
+                re.sub(r"[^a-z0-9]+", "_", context.lower()) if context else "unknown"
+            )
+            debug_file = os.path.join(debug_dir, f"{timestamp}_{context_slug}.txt")
+
+            with open(debug_file, "w", encoding="utf-8") as f:
+                f.write("Failed JSON Parse Debug Report\n")
+                f.write("=" * 60 + "\n")
+                f.write(f"Context: {context}\n")
+                f.write(f"Timestamp: {timestamp}\n")
+                f.write(f"Response length: {len(original_text)} characters\n")
+                f.write("\n" + "=" * 60 + "\n")
+                f.write("ORIGINAL RESPONSE:\n")
+                f.write("=" * 60 + "\n")
+                f.write(original_text)
+                f.write("\n\n" + "=" * 60 + "\n")
+                f.write("CLEANED TEXT:\n")
+                f.write("=" * 60 + "\n")
+                f.write(text)
+
+            logger.info(f"Debug file saved: {debug_file}")
+        except Exception as e:
+            logger.error(f"Failed to save debug file: {e}")
+
+    logger.debug(f"Failed to parse. Last 1000 chars of cleaned text:\n{text[-1000:]}")
+    return {"error": "Invalid JSON format"}
+
+
+def validate_and_clean_outline(outline_data):
+    """Validate and clean outline JSON structure, removing invalid keys
+
+    Args:
+        outline_data: Parsed JSON outline data
+
+    Returns:
+        Cleaned outline data with only valid keys
+    """
+    logger = logging.getLogger("validate_outline")
+
+    if not isinstance(outline_data, dict):
+        logger.warning("Outline data is not a dictionary")
+        return outline_data
+
+    if "error" in outline_data:
+        return outline_data
+
+    # Validate and clean sections
+    if "sections" in outline_data and isinstance(outline_data["sections"], list):
+        cleaned_sections = []
+        invalid_keys_found = []
+
+        for i, section in enumerate(outline_data["sections"]):
+            if not isinstance(section, dict):
+                logger.warning(f"Section {i} is not a dictionary, skipping")
+                continue
+
+            # Check for invalid keys
+            allowed_keys = {"name", "content"}
+            actual_keys = set(section.keys())
+            invalid_keys = actual_keys - allowed_keys
+
+            if invalid_keys:
+                invalid_keys_found.extend(invalid_keys)
+                logger.warning(
+                    f"Section {i} ('{section.get('name', 'unnamed')}') has invalid keys: {invalid_keys}. "
+                    f"Stripping them out."
+                )
+
+            # Create cleaned section with only allowed keys
+            cleaned_section = {
+                "name": section.get("name", ""),
+                "content": section.get("content", []),
+            }
+            cleaned_sections.append(cleaned_section)
+
+        if invalid_keys_found:
+            unique_invalid = set(invalid_keys_found)
+            logger.info(
+                f"✓ Cleaned outline: removed {len(invalid_keys_found)} invalid keys "
+                f"({', '.join(sorted(unique_invalid))}) from sections"
+            )
+
+        outline_data["sections"] = cleaned_sections
+
+    return outline_data
 
 
 """  """
@@ -236,8 +443,7 @@ def generate_video_idea(
     video_idea = create_invoke_chain(llm, IDEATION_PROMPT_TEMPLATE_TEXT, input_json)
     logging.debug("Idea response: %s", video_idea)
     # Convert result to JSON
-    # video_idea_json = json.loads(video_idea)
-    return safe_json_loads(video_idea)
+    return safe_json_loads(video_idea, context="video_idea")
 
 
 # Function: Generate ideation post-QA output
@@ -251,25 +457,63 @@ def generate_idea_qa_report(llm: Union[ChatOpenAI, ChatOllama], video_idea: Dict
     idea_qa_chain = IDEATION_QA_PROMPT_TEMPLATE | llm | StrOutputParser()
     idea_qa_response = idea_qa_chain.invoke(video_idea)
     logging.debug("Idea QA response: %s", idea_qa_response)
-    idea_qa_response_json = safe_json_loads(idea_qa_response)
+    idea_qa_response_json = safe_json_loads(idea_qa_response, context="idea_qa_report")
     return idea_qa_response_json
 
 
 # Function: Generate video outline
 
 
+@retry_with_backoff(
+    max_retries=3,
+    base_delay=1.0,
+    exceptions=(json.JSONDecodeError, KeyError, TypeError),
+)
 def generate_video_outline(llm: Union[ChatOpenAI, ChatOllama], video_idea: str):
-    """Generate video outline from video_idea (json)"""
+    """Generate video outline from video_idea (json) with retry logic"""
+    logger = logging.getLogger("generate_video_outline")
+
+    logger.info("Generating video outline...")
+    logger.debug(
+        f"Input video_idea keys: {list(video_idea.keys()) if isinstance(video_idea, dict) else 'N/A'}"
+    )
 
     outline_prompt = ChatPromptTemplate.from_template(OUTLINE_PROMPT_TEMPLATE)
-
-    # --- Construct the outline chain ---
     outline_chain = outline_prompt | llm | StrOutputParser()
 
-    # --- Run the outline Chain ---
+    # Run the outline chain
+    logger.debug("Invoking outline chain...")
     outline_response = outline_chain.invoke(video_idea)
-    # Convert result to JSON
-    outline = safe_json_loads(outline_response)
+
+    logger.debug(f"Outline response received ({len(outline_response)} chars)")
+    logger.debug(f"Outline response preview: {outline_response[:300]}...")
+
+    # Convert result to JSON with context for better debugging
+    outline = safe_json_loads(outline_response, context="video_outline")
+
+    # Clean up the outline to remove invalid keys
+    outline = validate_and_clean_outline(outline)
+
+    # Validate the outline structure
+    if outline and "error" not in outline:
+        if "sections" not in outline:
+            logger.error("Outline missing 'sections' key")
+            raise KeyError("Generated outline is missing required 'sections' key")
+        if not isinstance(outline.get("sections"), list):
+            logger.error(
+                f"Outline 'sections' is not a list: {type(outline.get('sections'))}"
+            )
+            raise TypeError("Generated outline 'sections' must be a list")
+        logger.info(
+            f"✓ Successfully generated outline with {len(outline['sections'])} sections"
+        )
+    elif outline and "error" in outline:
+        logger.error(f"Outline generation returned error: {outline['error']}")
+        raise ValueError(f"Outline generation error: {outline['error']}")
+    else:
+        logger.error("Outline is None or invalid")
+        raise ValueError("Failed to generate valid outline")
+
     return outline
 
 
@@ -285,7 +529,9 @@ def generate_outline_qa_report(
     )
     outline_qa_chain = OUTLINE_QA_PROMPT_TEMPLATE | llm | StrOutputParser()
     outline_qa_response = outline_qa_chain.invoke({"outline": outline, **video_idea})
-    outline_qa_response_json = safe_json_loads(outline_qa_response)
+    outline_qa_response_json = safe_json_loads(
+        outline_qa_response, context="outline_qa_report"
+    )
     return outline_qa_response_json
 
 
@@ -298,7 +544,7 @@ def generate_outline_final(llm, outline_qa_report, outline_json):
     outline_final = create_invoke_chain(
         llm, OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT, input_json
     )
-    return safe_json_loads(outline_final)
+    return safe_json_loads(outline_final, context="outline_final")
 
 
 def summarize_script_section(llm: Union[ChatOpenAI, ChatOllama], section_script: str):
@@ -400,7 +646,9 @@ def generate_qa_report(
             {"title": title, "level": level, "content": section_script}
         )
 
-        section_qa = safe_json_loads(script_qa_response)
+        section_qa = safe_json_loads(
+            script_qa_response, context=f"script_qa_{section_name}"
+        )
         aggregated_qa["sections"].append(
             {"section_name": section_name, "qa_analysis": section_qa}
         )
