@@ -589,12 +589,13 @@ def verify_facts_with_search(
 
     # Extract verifiable claims using LLM
     extract_prompt = ChatPromptTemplate.from_template(
-        """Analyze the following content and extract 3-5 specific, verifiable factual claims that can be checked via web search.
-        Focus on technical details, version numbers, command syntax, package names, and URLs.
+        """Analyze the following content and the most important 3 claims that can be checked via web search.
+        Focus on technical details, version numbers, command syntax, package names, repository names, and URLs.
+        Do not check specific code file names.
         
         Content: {content}
         
-        Return ONLY a JSON array of claims (strings). Example: ["Python 3.9 was released", "pip is the package installer"]
+        Return ONLY a JSON array of claims (strings).
         """
     )
 
@@ -618,13 +619,68 @@ def verify_facts_with_search(
         for claim in claims[:3]:  # Limit to 3 to avoid rate limiting
             try:
                 search_results = search_tool.run(str(claim))
-                verifications.append(
+
+                # Use LLM to analyze if search results verify the claim
+                logger.debug(f"Verifying claim with LLM: {claim[:60]}...")
+                verification_prompt = ChatPromptTemplate.from_template(
+                    """Analyze if the search results support or refute the claim.
+
+Claim: {claim}
+
+Search Results: {search_results}
+
+Return ONLY valid JSON with this structure:
+{{
+  "verified": true/false,
+  "confidence": "high/medium/low",
+  "reasoning": "brief explanation"
+}}
+
+Guidelines:
+- "verified": true only if results clearly support the claim
+- "verified": false if results contradict or don't mention the claim
+- Use "high" confidence when results directly confirm/refute
+- Use "medium" for partial matches
+- Use "low" when results are ambiguous or insufficient
+"""
+                )
+
+                verification_chain = verification_prompt | llm | StrOutputParser()
+                verification_response = verification_chain.invoke(
                     {
-                        "claim": claim,
-                        "search_results": search_results[:300],  # First 300 chars
-                        "verified": len(search_results) > 50,  # Simple heuristic
+                        "claim": str(claim),
+                        "search_results": search_results[:1000],  # Limit for LLM
                     }
                 )
+
+                verification_result = safe_json_loads(
+                    verification_response,
+                    context="claim_verification",
+                    save_debug=False,
+                )
+
+                if verification_result and "error" not in verification_result:
+                    verifications.append(
+                        {
+                            "claim": claim,
+                            "search_results": search_results[:300],
+                            "verified": verification_result.get("verified", False),
+                            "confidence": verification_result.get("confidence", "low"),
+                            "reasoning": verification_result.get("reasoning", ""),
+                        }
+                    )
+                else:
+                    # Fallback if LLM verification fails
+                    verifications.append(
+                        {
+                            "claim": claim,
+                            "search_results": search_results[:300],
+                            "verified": False,
+                            "confidence": "error",
+                            "reasoning": "Verification analysis failed",
+                        }
+                    )
+
                 time.sleep(1)  # Rate limiting
             except Exception as e:
                 logger.warning(f"Search failed for claim '{claim}': {e}")
@@ -632,7 +688,7 @@ def verify_facts_with_search(
         return {
             "factcheck_performed": True,
             "verifications": verifications,
-            "summary": f"Verified {len(verifications)} claims via web search",
+            "summary": f"Checked {len(verifications)} claims via web search",
         }
 
     except Exception as e:

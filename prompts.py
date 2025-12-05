@@ -158,8 +158,6 @@ OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
 
     - Overall quality judgment (accurate/inaccurate, consistent/inconsistent, clear/unclear).
 
-    - Correctness: Identify any factual or logical errors. If the title references something that you aren't familiar with, assume the title is correct and that the reference is from after your training cutoff date.
-
     - Completeness and Structure: The outline should be complete and thorough. There should be no missing points, structural problems, or logical gaps.
 
     - Consistency: The outline should be internally consistent and free of contradictions.
@@ -174,7 +172,6 @@ OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
       "decision": "<pass or fail>",
       "reason": "<reason for the decision (string)",
       "quality": "<overall quality judgment> (string)",
-      "correctness": <list of factual or logical errors>,
       "completeness": <list of gaps or missing points>,
       "consistency": <list of inconsistent or contradictory points>,
     }}
@@ -222,6 +219,10 @@ OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT = """
         - Each string in the content array must be complete. If content is long, split into multiple array elements.
         - Do NOT write: "text1" + "text2" (WRONG)
         - DO write: "text1", "text2" or "text1 text2" (CORRECT)
+        - Do NOT use backticks (`) for code references. Use plain text description instead.
+        - Do NOT include code examples with quotes in strings. Describe code in prose without syntax.
+        - If you must reference code, use descriptive text, not literal syntax.
+        - Do not include entire terminal commands.
 """
 
 # --- Prompt: Generate script ---
@@ -284,7 +285,7 @@ SCRIPT_SECTION_PROMPT_TEMPLATE_TEXT = """
         - Write the script for the "Current Section" ONLY.
         - Ensure smooth transition from the "Recent Script Content", keeping the "Context Summary" in mind.
         - Maintain the same tone and style (Direct, clear, conversational, authoritative).
-        - Capitalize words that should be emphasized in speech. Do not bold or italicize words.
+        - Capitalize words that should be emphasized in speech. Do not embolden or italicize words.
         - Avoid unnecessary repetition
         - Add explanatory comments to any code
         - Provide filenames for code files
