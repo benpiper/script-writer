@@ -685,12 +685,23 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
     # Iterate through sections, accumulating script
     running_summary = "No previous content."
     sections_data = []
+    total_sections = len(outline.get("sections", []))
+
+    logging.info(f"📝 Starting script generation for {total_sections} sections...")
 
     for i, section in enumerate(outline.get("sections", [])):
         section_name = section.get("name", "")
         section_content = "\n".join(section.get("content", []))
 
-        logging.info(f"Generating script for section: {section_name}")
+        # Progress indicator
+        section_num = i + 1
+        progress_pct = int((section_num / total_sections) * 100)
+        logging.info("")
+        logging.info("=" * 70)
+        logging.info(
+            f"📄 Section {section_num}/{total_sections} ({progress_pct}%): {section_name}"
+        )
+        logging.info("=" * 70)
 
         # Get recent script content (last ~2000 chars) for immediate context
         recent_script_content = (
@@ -699,6 +710,7 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
         if not recent_script_content:
             recent_script_content = "No preceding script."
 
+        logging.debug(f"  → Invoking LLM for section: {section_name}")
         section_script = script_chain.invoke(
             {
                 "title": title,
@@ -711,16 +723,29 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
             }
         )
 
+        script_length = len(section_script)
+        logging.info(f"  ✓ Generated {script_length} characters for '{section_name}'")
+
         full_script += f"\n\n{section_script}"
         sections_data.append({"name": section_name, "script": section_script})
 
         # Update summary for next iteration
-        logging.info(f"Summarizing section: {section_name}")
+        logging.info("  → Summarizing section for context...")
         new_summary = summarize_script_section(llm, section_script)
         if running_summary == "No previous content.":
             running_summary = new_summary
         else:
-            running_summary += f"\n\n{new_summary}"
+            running_summary += f"\n{new_summary}"
+
+    # Completion message
+    total_chars = len(full_script)
+    logging.info("")
+    logging.info("=" * 70)
+    logging.info(f"✅ Script generation complete!")
+    logging.info(f"   Total sections: {total_sections}")
+    logging.info(f"   Total length: {total_chars:,} characters")
+    logging.info("=" * 70)
+    logging.info("")
 
     return full_script, sections_data
 
