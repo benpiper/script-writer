@@ -731,7 +731,7 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
 def generate_qa_report(
     llm: Union[ChatOpenAI, ChatOllama], title: str, level: str, sections_data: list
 ):
-    """Generate QA report from script sections"""
+    """Generate QA report from script sections with optional fact-checking"""
     SCRIPT_QA_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
         SCRIPT_QA_PROMPT_TEMPLATE_TEXT
     )
@@ -754,6 +754,14 @@ def generate_qa_report(
         section_qa = safe_json_loads(
             script_qa_response, context=f"script_qa_{section_name}"
         )
+
+        # Add fact-checking if SearXNG is configured
+        fact_check_results = verify_facts_with_search(
+            llm, section_script, context=f"script_section_{section_name}"
+        )
+        if fact_check_results:
+            section_qa["fact_check"] = fact_check_results
+
         aggregated_qa["sections"].append(
             {"section_name": section_name, "qa_analysis": section_qa}
         )
