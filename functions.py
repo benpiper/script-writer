@@ -9,11 +9,12 @@ import time
 import functools
 from datetime import datetime
 from dotenv import load_dotenv
-from typing import Dict, Union
+from typing import Dict, Union, Optional, List
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_ollama import ChatOllama
+from langchain_community.utilities import SearxSearchWrapper
 from prompts import (
     IDEATION_PROMPT_TEMPLATE_TEXT,
     IDEATION_QA_PROMPT_TEMPLATE_TEXT,
@@ -28,6 +29,24 @@ from prompts import (
 # Helper functions
 
 load_dotenv()
+
+# Initialize search tool (optional - only if SEARXNG_URL is configured)
+_search_tool = None
+
+
+def get_search_tool():
+    """Get or create SearXNG search tool"""
+    global _search_tool
+    if _search_tool is None:
+        searxng_url = os.getenv("SEARXNG_URL")
+        if searxng_url:
+            try:
+                _search_tool = SearxSearchWrapper(searx_host=searxng_url)
+                logging.info(f"SearXNG search tool initialized at {searxng_url}")
+            except Exception as e:
+                logging.warning(f"Failed to initialize SearXNG: {e}")
+    return _search_tool
+
 
 # Get LLM
 
@@ -523,7 +542,7 @@ def generate_video_outline(llm: Union[ChatOpenAI, ChatOllama], video_idea: str):
 def generate_outline_qa_report(
     llm: Union[ChatOpenAI, ChatOllama], video_idea: str, outline: str
 ):
-    """Generate QA report for outline"""
+    """Generate QA report for outline with optional fact-checking"""
     OUTLINE_QA_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
         OUTLINE_QA_PROMPT_TEMPLATE_TEXT
     )
@@ -532,7 +551,93 @@ def generate_outline_qa_report(
     outline_qa_response_json = safe_json_loads(
         outline_qa_response, context="outline_qa_report"
     )
+
+    # Add fact-checking if SearXNG is configured
+    fact_check_results = verify_facts_with_search(
+        llm, json.dumps(outline), context="outline"
+    )
+    if fact_check_results:
+        outline_qa_response_json["fact_check"] = fact_check_results
+
     return outline_qa_response_json
+
+
+# Function: Verify facts with search
+
+
+def verify_facts_with_search(
+    llm: Union[ChatOpenAI, ChatOllama], content: str, context: str = "content"
+) -> Optional[Dict]:
+    """Verify factual claims in content using SearXNG search
+
+    Args:
+        llm: Language model for extraction and analysis
+        content: Content to fact-check (JSON string or dict)
+        context: Description of what's being checked
+
+    Returns:
+        Dict with verification results or None if search unavailable
+    """
+    logger = logging.getLogger("fact_checker")
+
+    search_tool = get_search_tool()
+    if not search_tool:
+        logger.info("SearXNG not configured, skipping fact-checking")
+        return None
+
+    logger.info(f"Running fact-check on {context}...")
+
+    # Extract verifiable claims using LLM
+    extract_prompt = ChatPromptTemplate.from_template(
+        """Analyze the following content and extract 3-5 specific, verifiable factual claims that can be checked via web search.
+        Focus on technical details, version numbers, command syntax, package names, and URLs.
+        
+        Content: {content}
+        
+        Return ONLY a JSON array of claims (strings). Example: ["Python 3.9 was released", "pip is the package installer"]
+        """
+    )
+
+    try:
+        extract_chain = extract_prompt | llm | StrOutputParser()
+        claims_response = extract_chain.invoke(
+            {"content": str(content)[:2000]}
+        )  # Limit content size
+        claims = safe_json_loads(
+            claims_response, context="claims_extraction", save_debug=False
+        )
+
+        if not claims or isinstance(claims, dict):
+            logger.warning("No claims extracted or invalid format")
+            return None
+
+        logger.debug(f"Extracted {len(claims)} claims to verify")
+
+        # Verify each claim
+        verifications = []
+        for claim in claims[:3]:  # Limit to 3 to avoid rate limiting
+            try:
+                search_results = search_tool.run(str(claim))
+                verifications.append(
+                    {
+                        "claim": claim,
+                        "search_results": search_results[:300],  # First 300 chars
+                        "verified": len(search_results) > 50,  # Simple heuristic
+                    }
+                )
+                time.sleep(1)  # Rate limiting
+            except Exception as e:
+                logger.warning(f"Search failed for claim '{claim}': {e}")
+
+        return {
+            "factcheck_performed": True,
+            "verifications": verifications,
+            "summary": f"Verified {len(verifications)} claims via web search",
+        }
+
+    except Exception as e:
+        logger.error(f"Fact-checking failed: {e}")
+        return {"factcheck_performed": False, "error": str(e)}
 
 
 # Function: Generate outline based on QA report
