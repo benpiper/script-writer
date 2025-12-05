@@ -11,6 +11,7 @@ from functions import (
     generate_video_idea,
     generate_idea_qa_report,
     generate_video_outline,
+    generate_video_outline_with_langgraph,
     generate_video_script,
     generate_qa_report,
     generate_outline_qa_report,
@@ -29,11 +30,12 @@ from slugify import slugify
 
 
 class ScriptWriter:
-    def __init__(self, topic, domain, level, model):
+    def __init__(self, topic, domain, level, model, use_langgraph=True):
         self.topic = topic
         self.domain = domain
         self.level = level
         self.model = model
+        self.use_langgraph = use_langgraph
         self.timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         self.llm = get_llm(self.model)
         self.filename_suffix = None
@@ -120,7 +122,14 @@ class ScriptWriter:
         outline_json = None
         while not approval_status:
             logger.info("Generating video outline")
-            outline_json = generate_video_outline(self.llm, video_idea_qa_json)
+            if self.use_langgraph:
+                logger.info("Using LangGraph with autonomous search")
+                outline_json = generate_video_outline_with_langgraph(
+                    self.llm, video_idea_qa_json
+                )
+            else:
+                logger.info("Using standard outline generation")
+                outline_json = generate_video_outline(self.llm, video_idea_qa_json)
             logger.info("Outline JSON")
             logger.info(outline_json)
             if outline_json is None:
@@ -180,13 +189,27 @@ def parse_arguments():
         "--level", type=str, default="Beginner", help="Target audience level"
     )
     parser.add_argument("--model", type=str, default="gpt-oss", help="LLM model to use")
+    parser.add_argument(
+        "--use-langgraph",
+        action="store_true",
+        default=True,
+        help="Use LangGraph for outline generation with autonomous search (default: True)",
+    )
+    parser.add_argument(
+        "--no-langgraph",
+        dest="use_langgraph",
+        action="store_false",
+        help="Disable LangGraph and use standard outline generation",
+    )
     return parser.parse_args()
 
 
 def main():
     try:
         args = parse_arguments()
-        writer = ScriptWriter(args.topic, args.domain, args.level, args.model)
+        writer = ScriptWriter(
+            args.topic, args.domain, args.level, args.model, args.use_langgraph
+        )
         writer.run()
     except KeyboardInterrupt:
         logger.warning("Script execution interrupted by user.")

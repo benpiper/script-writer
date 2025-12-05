@@ -9,12 +9,13 @@ import time
 import functools
 from datetime import datetime
 from dotenv import load_dotenv
-from typing import Dict, Union, Optional, List
+from typing import Dict, Union, Optional, List, TypedDict
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_ollama import ChatOllama
 from langchain_community.utilities import SearxSearchWrapper
+from langgraph.graph import StateGraph, END
 from prompts import (
     IDEATION_PROMPT_TEMPLATE_TEXT,
     IDEATION_QA_PROMPT_TEMPLATE_TEXT,
@@ -24,6 +25,8 @@ from prompts import (
     OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT,
     SCRIPT_SECTION_PROMPT_TEMPLATE_TEXT,
     SUMMARIZE_SECTION_PROMPT_TEMPLATE_TEXT,
+    SEARCH_DECISION_PROMPT_TEXT,
+    OUTLINE_WITH_SEARCH_PROMPT_TEXT,
 )
 
 # Helper functions
@@ -534,6 +537,250 @@ def generate_video_outline(llm: Union[ChatOpenAI, ChatOllama], video_idea: str):
         raise ValueError("Failed to generate valid outline")
 
     return outline
+
+
+# --- LangGraph-based Outline Generation ---
+
+
+class OutlineAgentState(TypedDict):
+    """State for the outline generation agent graph"""
+
+    video_idea: dict
+    needs_search: bool
+    search_queries: List[str]
+    search_results: str
+    outline: dict
+    error: Optional[str]
+
+
+def should_search_node(
+    state: OutlineAgentState, llm: Union[ChatOpenAI, ChatOllama]
+) -> OutlineAgentState:
+    """Node: Decide if web search is needed"""
+    logger = logging.getLogger("outline_agent.should_search")
+    logger.info("Analyzing if search is needed...")
+
+    prompt = ChatPromptTemplate.from_template(SEARCH_DECISION_PROMPT_TEXT)
+    chain = prompt | llm | StrOutputParser()
+
+    try:
+        response = chain.invoke(
+            {"video_idea_json": json.dumps(state["video_idea"], indent=2)}
+        )
+        decision = safe_json_loads(
+            response, context="search_decision", save_debug=False
+        )
+
+        if decision and "error" not in decision:
+            state["needs_search"] = decision.get("needs_search", False)
+            state["search_queries"] = decision.get("search_queries", [])
+            logger.info(
+                f"Decision: {'SEARCH' if state['needs_search'] else 'NO SEARCH'}"
+            )
+            if state["needs_search"]:
+                logger.info(f"Search queries: {state['search_queries']}")
+            logger.debug(f"Reasoning: {decision.get('reasoning', 'N/A')}")
+        else:
+            logger.warning("Failed to parse search decision, defaulting to no search")
+            state["needs_search"] = False
+            state["search_queries"] = []
+
+    except Exception as e:
+        logger.error(f"Error in should_search_node: {e}")
+        state["needs_search"] = False
+        state["search_queries"] = []
+
+    return state
+
+
+def search_node(state: OutlineAgentState) -> OutlineAgentState:
+    """Node: Execute web search"""
+    logger = logging.getLogger("outline_agent.search")
+
+    search_tool = get_search_tool()
+    if not search_tool:
+        logger.warning("Search requested but SearXNG not configured")
+        state["search_results"] = "Search not available"
+        return state
+
+    all_results = []
+    for query in state["search_queries"][:3]:  # Limit to 3 queries
+        try:
+            logger.info(f"Searching: {query}")
+            results = search_tool.run(query)
+            all_results.append(f"Query: {query}\nResults: {results[:500]}\n")
+            time.sleep(1)  # Rate limiting
+        except Exception as e:
+            logger.warning(f"Search failed for '{query}': {e}")
+            all_results.append(f"Query: {query}\nError: {str(e)}\n")
+
+    state["search_results"] = "\n---\n".join(all_results)
+    logger.info(
+        f"Search completed. Total results: {len(state['search_results'])} chars"
+    )
+
+    return state
+
+
+def generate_outline_node(
+    state: OutlineAgentState, llm: Union[ChatOpenAI, ChatOllama]
+) -> OutlineAgentState:
+    """Node: Generate the outline (with or without search context)"""
+    logger = logging.getLogger("outline_agent.generate_outline")
+    logger.info("Generating outline...")
+
+    # Prepare search context
+    search_context = "No search performed."
+    if state.get("needs_search") and state.get("search_results"):
+        search_context = f"Search Results:\n{state['search_results']}"
+
+    # Use the search-aware prompt
+    prompt = ChatPromptTemplate.from_template(OUTLINE_WITH_SEARCH_PROMPT_TEXT)
+    chain = prompt | llm | StrOutputParser()
+
+    try:
+        video_idea = state["video_idea"]
+        response = chain.invoke(
+            {
+                "search_context": search_context,
+                **video_idea,  # Unpack video_idea fields
+            }
+        )
+
+        outline = safe_json_loads(response, context="video_outline_langgraph")
+        outline = validate_and_clean_outline(outline)
+
+        if outline and "error" not in outline:
+            if "sections" not in outline:
+                logger.error("Outline missing 'sections' key")
+                state["error"] = "Generated outline is missing required 'sections' key"
+            elif not isinstance(outline.get("sections"), list):
+                logger.error(
+                    f"Outline 'sections' is not a list: {type(outline.get('sections'))}"
+                )
+                state["error"] = "Generated outline 'sections' must be a list"
+            else:
+                logger.info(
+                    f"✓ Successfully generated outline with {len(outline['sections'])} sections"
+                )
+                state["outline"] = outline
+        elif outline and "error" in outline:
+            logger.error(f"Outline generation returned error: {outline['error']}")
+            state["error"] = outline["error"]
+        else:
+            logger.error("Outline is None or invalid")
+            state["error"] = "Failed to generate valid outline"
+
+    except Exception as e:
+        logger.error(f"Error in generate_outline_node: {e}")
+        state["error"] = str(e)
+
+    return state
+
+
+def route_after_search_decision(state: OutlineAgentState) -> str:
+    """Conditional edge: Route based on search decision"""
+    if state.get("needs_search", False):
+        return "search"
+    else:
+        return "generate_outline"
+
+
+def create_outline_graph(llm: Union[ChatOpenAI, ChatOllama]) -> StateGraph:
+    """Create and compile the LangGraph workflow for outline generation"""
+    logger = logging.getLogger("outline_agent")
+    logger.info("Creating outline generation graph...")
+
+    # Create the graph
+    workflow = StateGraph(OutlineAgentState)
+
+    # Add nodes (wrap with llm where needed)
+    workflow.add_node("should_search", lambda state: should_search_node(state, llm))
+    workflow.add_node("search", search_node)
+    workflow.add_node(
+        "generate_outline", lambda state: generate_outline_node(state, llm)
+    )
+
+    # Define edges
+    workflow.set_entry_point("should_search")
+
+    # Conditional edge after search decision
+    workflow.add_conditional_edges(
+        "should_search",
+        route_after_search_decision,
+        {"search": "search", "generate_outline": "generate_outline"},
+    )
+
+    # After search, go to generate_outline
+    workflow.add_edge("search", "generate_outline")
+
+    # After generate_outline, end
+    workflow.add_edge("generate_outline", END)
+
+    # Compile the graph
+    app = workflow.compile()
+    logger.info("✓ Outline generation graph compiled")
+
+    return app
+
+
+@retry_with_backoff(
+    max_retries=3,
+    base_delay=1.0,
+    exceptions=(json.JSONDecodeError, KeyError, TypeError, ValueError),
+)
+def generate_video_outline_with_langgraph(
+    llm: Union[ChatOpenAI, ChatOllama], video_idea: Dict
+) -> Dict:
+    """Generate video outline using LangGraph with optional search capability
+
+    Args:
+        llm: Language model (OpenAI or Ollama)
+        video_idea: Dictionary containing video idea details
+
+    Returns:
+        Dictionary containing the generated outline
+
+    Raises:
+        ValueError: If outline generation fails
+        KeyError: If required fields are missing
+        TypeError: If outline structure is invalid
+    """
+    logger = logging.getLogger("generate_video_outline_langgraph")
+    logger.info("Generating video outline with LangGraph...")
+
+    # Create the graph
+    app = create_outline_graph(llm)
+
+    # Initialize state
+    initial_state = OutlineAgentState(
+        video_idea=video_idea,
+        needs_search=False,
+        search_queries=[],
+        search_results="",
+        outline={},
+        error=None,
+    )
+
+    # Execute the graph
+    logger.info("Executing outline generation workflow...")
+    final_state = app.invoke(initial_state)
+
+    # Check for errors
+    if final_state.get("error"):
+        logger.error(f"Outline generation failed: {final_state['error']}")
+        raise ValueError(f"Outline generation error: {final_state['error']}")
+
+    outline = final_state.get("outline")
+    if not outline:
+        logger.error("No outline generated")
+        raise ValueError("Failed to generate outline")
+
+    logger.info("✓ Outline generation complete")
+    return outline
+
+
+# --- End of LangGraph Implementation ---
 
 
 # Function: Generate video script

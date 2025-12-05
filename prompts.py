@@ -354,3 +354,113 @@ SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
     - Do not use markdown formatting.
     - Analyze the <script_content> provided above and generate the JSON report now.
 """
+
+# --- Prompt: Search Decision (for LangGraph) ---
+SEARCH_DECISION_PROMPT_TEXT = """
+You are analyzing whether web search is needed to create an accurate, up-to-date video outline.
+
+## Topic Information
+{video_idea_json}
+
+## Decision Criteria
+Search is NEEDED if the topic involves:
+- Specific software versions, release dates, or features
+- Current best practices that may have changed
+- Recent tools, libraries, or technologies
+- Time-sensitive information
+- Technical specifications or API details
+
+Search is NOT NEEDED if the topic involves:
+- General concepts (e.g., "what is a variable")
+- Fundamental programming principles
+- Timeless educational content
+- Topics you have sufficient knowledge about
+
+## Output Format
+Return ONLY a JSON object:
+
+{{
+  "needs_search": true/false,
+  "reasoning": "brief explanation of your decision",
+  "search_queries": ["query 1", "query 2"] // if needs_search is true, provide 1-3 specific search queries
+}}
+
+**Critical**: Return ONLY valid JSON. No text before or after.
+"""
+
+# --- Prompt: Outline with Search Context (for LangGraph) ---
+OUTLINE_WITH_SEARCH_PROMPT_TEXT = """
+Begin with a checklist of the main planning and sequencing steps you will follow before creating the outline. Do not output this checklist.
+Create an outline using the structured input provided.
+
+Input JSON structure:
+{{
+    "title": "{title}",
+    "domain": "{domain}",
+    "level": "{level}",
+    "hook": "{hook}",
+    "tags": {tags},
+    "tools": {tools},
+    "objectives": {objectives},
+}}
+
+## Search Context (if available)
+{search_context}
+
+Guidelines:
+- If search context is provided above, incorporate the factual information into your outline
+- Ensure version numbers, dates, and technical details match the search results
+- Stay strictly within the scope defined by the input.
+- Exclude self-paced exercises; all demonstrations should be incorporated within the outline.
+- Carefully design the outline to ensure it fully addresses the content indicated in the input.
+- Arrange all sections and demonstration steps in a clear, logical sequence.
+- The outline must be comprehensive and complete.
+- The outline must be detailed but concise enough to fit within output limits.
+- Do not include code blocks
+- Use only ASCII characters
+- For the final section, refrain from including next steps, recommendations, or external/additional resources.
+- Return ONLY valid JSON.
+- Do not include any text before or after the JSON.
+- Ensure all keys and string values are enclosed in double quotes.
+- **CRITICAL**: The 'sections' array must be a FLAT list of objects. DO NOT nest sections inside other sections.
+- **CRITICAL**: Do NOT use string concatenation operators (+) or any other programming syntax inside JSON. Each string must be complete.
+- If content is long, keep it as one complete string or split into multiple array elements. Never use + to join strings.
+
+If 'title' or 'tools' fields are missing or not the correct type, respond with the following JSON object:
+
+{{"error": "Missing or invalid input fields."}}
+
+
+After outlining, validate that each section directly supports the provided inputs, and confirm that all sections and steps are in logical order.
+If any guideline is not fully met, correct the outline before producing your final output.
+
+# Output Format
+- Return a JSON object structured as:
+
+{{
+    "meta":[
+    {{
+    "title": "{title}",
+    "level": "{level}",
+}}
+    ],
+    "sections": [
+    {{ "name": "<string>", "content": [<string>, ...] }},
+    {{ "name": "<string>", "content": [<string>, ...] }}
+    ]
+}}
+
+- 'sections' should be a single FLAT array of section objects.
+- **CRITICAL**: Each section object MUST have EXACTLY TWO keys: 'name' and 'content'. NO OTHER KEYS are allowed.
+- 'name': the title of the section (string)
+- 'content': an array of strings detailing the main points, demonstration steps, or explanations.
+- **DO NOT add keys like 'demonstration', 'subsections', 'sections', 'steps', or any other keys besides 'name' and 'content'.**
+- If you need to include demonstration steps, add them as strings in the 'content' array.
+
+Example of a VALID section:
+{{ "name": "Setting Up Environment", "content": ["Install Python 3.9+", "Run: pip install transformers", "Verify installation: python -c 'import transformers'"] }}
+
+Example of INVALID sections (DO NOT DO THIS):
+{{ "name": "Setup", "content": ["Install Python"], "demonstration": "python --version" }}  // WRONG - extra 'demonstration' key
+{{ "name": "Setup", "content": ["Install Python"], "steps": ["Step 1", "Step 2"] }}  // WRONG - extra 'steps' key
+"""
