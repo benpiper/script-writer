@@ -96,7 +96,7 @@ OUTLINE_PROMPT_TEMPLATE = """
         Guidelines:
         - Stay strictly within the scope defined by the input.
         - Arrange all sections in a clear, logical sequence.
-        - Do not include code or terminal commands.
+        - Do not include code or any commands.
         - Use only ASCII characters. Do not use Unicode characters.
         - Return ONLY valid JSON.
         - Do not include any text before or after the JSON.
@@ -211,7 +211,7 @@ OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT = """
         - Do NOT use backticks (`) for code references. Use plain text description instead.
         - Do NOT include code examples. Describe code in prose without syntax.
         - If you must reference code, use descriptive text, not literal syntax.
-        - Do not include entire terminal commands.
+        - Do not include code or any commands.
 """
 
 # --- Prompt: Generate script ---
