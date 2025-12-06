@@ -26,8 +26,7 @@ except ImportError:
     # Fallback if httpx/httpcore not available
     NETWORK_EXCEPTIONS = ()
 from prompts import (
-    IDEATION_PROMPT_TEMPLATE_TEXT,
-    IDEATION_QA_PROMPT_TEMPLATE_TEXT,
+    TITLE_GENERATION_PROMPT_TEMPLATE_TEXT,
     OUTLINE_PROMPT_TEMPLATE,
     SCRIPT_QA_PROMPT_TEMPLATE_TEXT,
     OUTLINE_QA_PROMPT_TEMPLATE_TEXT,
@@ -112,40 +111,6 @@ def ask_approval():
     except TimeoutError:
         logging.info("No input provided; defaulting to Approved")
         return True
-
-
-def select_title(video_idea_json):
-    """Select a title from the generated options with a timeout"""
-    titles = {
-        "1": ("Original", video_idea_json.get("title")),
-        "2": ("Contrarian", video_idea_json.get("title_contrarian")),
-        "3": ("Descriptive", video_idea_json.get("title_descriptive")),
-        "4": ("Problem/Solution", video_idea_json.get("title_problem_solution")),
-        "5": ("How-To", video_idea_json.get("title_how_to")),
-        "6": ("Curiosity", video_idea_json.get("title_curiosity")),
-    }
-
-    print("\nSelect a title (defaulting to 1 in 10 seconds):")
-    for key, (desc, title) in titles.items():
-        if title:
-            print(f"{key}. {desc}: {title}")
-
-    signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(10)
-
-    try:
-        choice = input("\nEnter choice (1-6): ").strip()
-        signal.alarm(0)
-        if choice in titles and titles[choice][1]:
-            selected_title = titles[choice][1]
-            logging.info(f"Selected title: {selected_title}")
-            return selected_title
-    except TimeoutError:
-        logging.info("Timeout reached. Defaulting to original title.")
-    except Exception as e:
-        logging.error(f"Error during selection: {e}")
-
-    return video_idea_json.get("title")
 
 
 # Retry Decorator
@@ -513,30 +478,17 @@ def create_invoke_chain(llm, prompt_template_text, input_json, retries=3):
 # Function: Generate video idea
 
 
-def generate_video_idea(
+# Function: Generate video titles
+
+
+def generate_titles(
     llm: Union[ChatOpenAI, ChatOllama], topic: str, domain: str, level: str
-) -> Dict:
-    """Generate video idea"""
+) -> str:
+    """Generate video titles"""
     input_json = {"topic": topic, "domain": domain, "level": level}
-    video_idea = create_invoke_chain(llm, IDEATION_PROMPT_TEMPLATE_TEXT, input_json)
-    logging.debug("Idea response: %s", video_idea)
-    # Convert result to JSON
-    return safe_json_loads(video_idea, context="video_idea")
-
-
-# Function: Generate ideation post-QA output
-
-
-def generate_idea_qa_report(llm: Union[ChatOpenAI, ChatOllama], video_idea: Dict):
-    """Generate QA report for idea"""
-    IDEATION_QA_PROMPT_TEMPLATE = ChatPromptTemplate.from_template(
-        IDEATION_QA_PROMPT_TEMPLATE_TEXT
-    )
-    idea_qa_chain = IDEATION_QA_PROMPT_TEMPLATE | llm | StrOutputParser()
-    idea_qa_response = idea_qa_chain.invoke(video_idea)
-    logging.debug("Idea QA response: %s", idea_qa_response)
-    idea_qa_response_json = safe_json_loads(idea_qa_response, context="idea_qa_report")
-    return idea_qa_response_json
+    titles = create_invoke_chain(llm, TITLE_GENERATION_PROMPT_TEMPLATE_TEXT, input_json)
+    logging.debug("Titles response: %s", titles)
+    return titles
 
 
 # Function: Generate video outline

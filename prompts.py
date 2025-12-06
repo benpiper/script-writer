@@ -1,80 +1,25 @@
 # --- Prompt: Generate Video Idea ---
-IDEATION_PROMPT_TEMPLATE_TEXT = """
-        Thoughtfully develop the following content idea:
-        Inputs:
-        - Topic: {topic} (string)
-        - Domain: {domain} (string)
-        - Audience level: {level} (string)
-
-        Guidelines
-        - Topic, domain, and audience level must align
-        - Do not allow fictional tools or concepts
-        If any of the input is incorrect, return this JSON error object:
-
-          {{
-            "error": "<reason>"
-          }}
-
+# --- Prompt: Generate Video Titles ---
+TITLE_GENERATION_PROMPT_TEMPLATE_TEXT = """
+        Generate 10 distinct, SEO-optimized video titles for the following topic.
         
-        - Output Format
-        Return one JSON object using the following format:
+        Inputs:
+        - Topic: {topic}
+        - Domain: {domain}
+        - Audience level: {level}
 
-            {{
-                "title": "<string: SEO-optimized title>",
-                "title_contrarian": "<string: contrarian title>",
-                "title_descriptive": "<string: descriptive title>",
-                "title_problem_solution": "<string: problem-solution>",
-                "title_how_to": "<string: how-to>",
-                "title_curiosity": "<string: curiosity>",
-                "topic": "{topic}",
-                "domain": "{domain}",
-                "level": "{level}",
-                "hook": "<string: punchy, provocative hook under 50 words that grabs attention>",
-                "tags": <list of tags>,
-                "tools": <list of tools (if applicable)>,
-                "objectives": <list of objectives or outcomes>,
-            }}
-
-        Output Constraints:
-        - Return only one JSON object per response.
-        - Use only ASCII characters
-        - Do not use markdown
-        - SEO-optimize all titles
-        - Return ONLY valid JSON.
-        - Do not include any text before or after the JSON.
-        - Ensure all keys and string values are enclosed in double quotes.
-
-        After generating the output, review it to ensure all requirements and formatting constraints are fulfilled.
-        If validation fails, self-correct and return a valid JSON object.
-
+        Guidelines:
+        - Titles should be catchy, relevant, and optimized for search.
+        - Include a mix of styles: How-to, Listicle, Contrarian, Problem/Solution, Curiosity gap.
+        - Do not use clickbait that misleads.
+        - Do not use markdown.
+        - Return ONLY the list of titles, one per line.
+        - No numbering or bullets.
         """
 
-# --- Prompt: Ideation QA Prompt Template ---
-IDEATION_QA_PROMPT_TEMPLATE_TEXT = """
-        The following input is a high-level idea for content.
-        Guidelines:
-        - Correct all factual, logical, spelling, grammar, and capitalization errors.
-        - The title provided is the user-selected title. DO NOT CHANGE THE TITLE.
-        - The topic, domain, level, hook, tags, tools, and objectives should align with the title. If any do not align, change other fields to make them match the title.
-        - If the topic is nonsensical, unclear, invalid, contradictory, or refers to things that don't exist, throw an error.
-        
-        ## Input
-        {{
-                "title": "{title}",
-                "topic": {topic},
-                "domain": "{domain}",
-                "level": "{level}",
-                "hook": "{hook}",
-                "tags": {tags},
-                "tools": {tools},
-                "objectives": {objectives},
-        }}
 
-        ## Output format
-        Output one JSON object with corrections using the same keys.
-        Append an additional key "qa_status" with brief remarks.
-        Do not use markdown.
-"""
+# --- Prompt: Ideation QA Prompt Template ---
+
 
 # --- Prompt: Generate Outline ---
 OUTLINE_PROMPT_TEMPLATE = """
@@ -87,7 +32,6 @@ OUTLINE_PROMPT_TEMPLATE = """
             "domain": "{domain}",
             "level": "{level}",
             "hook": "{hook}",
-            "tags": {tags},
             "tools": {tools},
             "objectives": {objectives},
 
@@ -96,7 +40,8 @@ OUTLINE_PROMPT_TEMPLATE = """
         Guidelines:
         - Stay strictly within the scope defined by the input.
         - Arrange all sections in a clear, logical sequence.
-        - Do not include code or any commands.
+        - Do not include code
+        - Do not include commands
         - Use only ASCII characters. Do not use Unicode characters.
         - Return ONLY valid JSON.
         - Do not include any text before or after the JSON.
@@ -388,7 +333,6 @@ Input JSON structure:
     "domain": "{domain}",
     "level": "{level}",
     "hook": "{hook}",
-    "tags": {tags},
     "tools": {tools},
     "objectives": {objectives},
 }}
