@@ -26,7 +26,6 @@ except ImportError:
     # Fallback if httpx/httpcore not available
     NETWORK_EXCEPTIONS = ()
 from prompts import (
-    TITLE_GENERATION_PROMPT_TEMPLATE_TEXT,
     OUTLINE_PROMPT_TEMPLATE,
     SCRIPT_QA_PROMPT_TEMPLATE_TEXT,
     OUTLINE_QA_PROMPT_TEMPLATE_TEXT,
@@ -150,6 +149,43 @@ def retry_with_backoff(max_retries=3, base_delay=1.0, exceptions=(Exception,)):
         return wrapper
 
     return decorator
+
+
+def generate_video_idea_data(
+    llm: Union[ChatOpenAI, ChatOllama], topic: str, domain: str, level: str
+) -> Dict:
+    """Generate comprehensive video idea data"""
+    from prompts import IDEA_GENERATION_PROMPT_TEMPLATE_TEXT
+
+    input_json = {"topic": topic, "domain": domain, "level": level}
+
+    # Create the chain using the new prompt template
+    idea_prompt = ChatPromptTemplate.from_template(IDEA_GENERATION_PROMPT_TEMPLATE_TEXT)
+    chain = idea_prompt | llm | StrOutputParser()
+
+    # Invoke the chain
+    idea_json_text = chain.invoke(input_json)
+
+    # Parse the result
+    idea_data = safe_json_loads(idea_json_text, context="video_idea_generation")
+
+    if not idea_data:
+        raise ValueError("Failed to generate valid idea data")
+
+    # Ensure inputs are included in the output for a complete file
+    idea_data["topic"] = topic
+    idea_data["domain"] = domain
+    idea_data["level"] = level
+
+    # Set a default title (the first suggested one) if available
+    if (
+        "titles" in idea_data
+        and isinstance(idea_data["titles"], list)
+        and len(idea_data["titles"]) > 0
+    ):
+        idea_data["title"] = idea_data["titles"][0]
+
+    return idea_data
 
 
 # Helper: Retry chain invocations with network error handling
@@ -476,19 +512,6 @@ def create_invoke_chain(llm, prompt_template_text, input_json, retries=3):
 
 
 # Function: Generate video idea
-
-
-# Function: Generate video titles
-
-
-def generate_titles(
-    llm: Union[ChatOpenAI, ChatOllama], topic: str, domain: str, level: str
-) -> str:
-    """Generate video titles"""
-    input_json = {"topic": topic, "domain": domain, "level": level}
-    titles = create_invoke_chain(llm, TITLE_GENERATION_PROMPT_TEMPLATE_TEXT, input_json)
-    logging.debug("Titles response: %s", titles)
-    return titles
 
 
 # Function: Generate video outline

@@ -1,20 +1,26 @@
 # --- Prompt: Generate Video Idea ---
 # --- Prompt: Generate Video Titles ---
-TITLE_GENERATION_PROMPT_TEMPLATE_TEXT = """
-        Generate 10 distinct, SEO-optimized video titles for the following topic.
+IDEA_GENERATION_PROMPT_TEMPLATE_TEXT = """
+        Develop a comprehensive video idea based on the input.
         
         Inputs:
         - Topic: {topic}
         - Domain: {domain}
         - Audience level: {level}
 
-        Guidelines:
-        - Titles should be catchy, relevant, and optimized for search.
-        - Include a mix of styles: How-to, Listicle, Contrarian, Problem/Solution, Curiosity gap.
-        - Do not use clickbait that misleads.
-        - Do not use markdown.
-        - Return ONLY the list of titles, one per line.
-        - No numbering or bullets.
+        Output Guidelines:
+        1. **Titles**: Generate 5 distinct, SEO-optimized titles. Mix styles (How-to, Listicle, Contrarian, Problem/Solution).
+        2. **Hook**: Write a single, compelling hook sentence to grab attention immediately.
+        3. **Tools**: List 3-7 specific tools, libraries, or technologies that will be used or discussed.
+        4. **Objectives**: List 3-5 clear learning objectives or takeaways for the viewer.
+        
+        Return ONLY a JSON object with the following structure:
+        {{
+            "titles": ["Title 1", "Title 2", ...],
+            "hook": "Your hook sentence",
+            "tools": ["Tool 1", "Tool 2", ...],
+            "objectives": ["Objective 1", "Objective 2", ...]
+        }}
         """
 
 
@@ -40,8 +46,8 @@ OUTLINE_PROMPT_TEMPLATE = """
         Guidelines:
         - Stay strictly within the scope defined by the input.
         - Arrange all sections in a clear, logical sequence.
-        - Do not include code
-        - Do not include commands
+        - Describe actions in plain English. Do not include literal shell commands (e.g., use "Install package" instead of "npm install package").
+        - Do not include code snippets.
         - Use only ASCII characters. Do not use Unicode characters.
         - Return ONLY valid JSON.
         - Do not include any text before or after the JSON.
@@ -349,7 +355,8 @@ Guidelines:
 - Arrange all sections and demonstration steps in a clear, logical sequence.
 - The outline must be comprehensive and complete.
 - The outline must be detailed but concise enough to fit within output limits.
-- Do not include code
+- Describe actions in plain English. Do not include literal shell commands.
+- Do not include code snippets.
 - Use only ASCII characters
 - For the final section, refrain from including next steps, recommendations, or external/additional resources.
 - Return ONLY valid JSON.

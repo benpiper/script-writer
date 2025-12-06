@@ -11,29 +11,25 @@ The script writer workflow is split into two parts: title generation and script 
 
 ---
 
-### Step 1: Generate Titles (Optional)
+### Step 1: Generate Video Idea
 
-Brainstorm SEO-optimized titles for your topic.
+Generate a comprehensive video idea (including titles, hook, tools, and objectives) and save it to a file.
 
 ```sh
-uv run generate_titles.py --topic "Your Topic" --domain "Tech" --level "Beginner"
+uv run generate_titles.py --topic "Your Topic" --save idea.json
 ```
 
-**Output**: Prints a list of suggested titles to the console.
+**Output**: Generates `idea.json` with a chosen title (defaulting to the first suggestion) and other required fields.
 
-### Step 2: Create Idea File
+### Step 2: Edit Idea (Optional)
 
-Create a JSON file (e.g., `idea.json`) with your selected title and details. You can copy the format below:
+Review and edit the `idea.json` file if you want to select a different title or tweak the content.
 
 ```json
 {
-  "title": "Your Selected Title",
+  "title": "Selected Title",
   "topic": "Your Topic",
-  "domain": "Your Domain",
-  "level": "Beginner",
-  "hook": "Your engaging hook...",
-  "tools": ["Tool1", "Tool2"],
-  "objectives": ["Objective 1", "Objective 2"],
+  ...
 }
 ```
 
