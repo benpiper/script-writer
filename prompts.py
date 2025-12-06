@@ -95,14 +95,9 @@ OUTLINE_PROMPT_TEMPLATE = """
 
         Guidelines:
         - Stay strictly within the scope defined by the input.
-        - Exclude self-paced exercises; all demonstrations should be incorporated within the outline.
-        - Carefully design the outline to ensure it fully addresses the content indicated in the input.
-        - Arrange all sections and demonstration steps in a clear, logical sequence.
-        - The outline must be comprehensive and complete.
-        - The outline must be detailed but concise enough to fit within output limits.
-        - Do not include code blocks
-        - Use only ASCII characters
-        - For the final section, refrain from including next steps, recommendations, or external/additional resources.
+        - Arrange all sections in a clear, logical sequence.
+        - Do not include code or terminal commands.
+        - Use only ASCII characters. Do not use Unicode characters.
         - Return ONLY valid JSON.
         - Do not include any text before or after the JSON.
         - Ensure all keys and string values are enclosed in double quotes.
@@ -156,10 +151,6 @@ OUTLINE_PROMPT_TEMPLATE = """
 OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
     Analyze the input based on the following criteria:
 
-    - Overall quality judgment (accurate/inaccurate, consistent/inconsistent, clear/unclear).
-
-    - Completeness and Structure: The outline should be complete and thorough. There should be no missing points, structural problems, or logical gaps.
-
     - Consistency: The outline should be internally consistent and free of contradictions.
 
     - Decision: PASS or FAIL
@@ -171,8 +162,6 @@ OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
     {{
       "decision": "<pass or fail>",
       "reason": "<reason for the decision (string)",
-      "quality": "<overall quality judgment> (string)",
-      "completeness": <list of gaps or missing points>,
       "consistency": <list of inconsistent or contradictory points>,
     }}
     
@@ -180,7 +169,7 @@ OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
     - Return ONLY valid JSON. No text before or after.
     - **CRITICAL**: JSON requires DOUBLE QUOTES (") for all keys and string values. Do NOT use single quotes (').
     - Do NOT use backticks (`) for code references. Use plain text description instead.
-    - Do NOT include code examples with quotes in strings. Describe code in prose without syntax.
+    - Do NOT include code examples. Describe code in prose without syntax.
     - If you must reference code, use descriptive text, not literal syntax.
     
     Begin the analysis now on the following content:
@@ -220,7 +209,7 @@ OUTLINE_FINAL_PROMPT_TEMPLATE_TEXT = """
         - Do NOT write: "text1" + "text2" (WRONG)
         - DO write: "text1", "text2" or "text1 text2" (CORRECT)
         - Do NOT use backticks (`) for code references. Use plain text description instead.
-        - Do NOT include code examples with quotes in strings. Describe code in prose without syntax.
+        - Do NOT include code examples. Describe code in prose without syntax.
         - If you must reference code, use descriptive text, not literal syntax.
         - Do not include entire terminal commands.
 """
@@ -416,7 +405,7 @@ Guidelines:
 - Arrange all sections and demonstration steps in a clear, logical sequence.
 - The outline must be comprehensive and complete.
 - The outline must be detailed but concise enough to fit within output limits.
-- Do not include code blocks
+- Do not include code
 - Use only ASCII characters
 - For the final section, refrain from including next steps, recommendations, or external/additional resources.
 - Return ONLY valid JSON.

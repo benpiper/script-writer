@@ -16,6 +16,15 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_ollama import ChatOllama
 from langchain_community.utilities import SearxSearchWrapper
 from langgraph.graph import StateGraph, END
+
+try:
+    import httpx
+    import httpcore
+
+    NETWORK_EXCEPTIONS = (httpx.RemoteProtocolError, httpcore.RemoteProtocolError)
+except ImportError:
+    # Fallback if httpx/httpcore not available
+    NETWORK_EXCEPTIONS = ()
 from prompts import (
     IDEATION_PROMPT_TEMPLATE_TEXT,
     IDEATION_QA_PROMPT_TEMPLATE_TEXT,
@@ -176,6 +185,53 @@ def retry_with_backoff(max_retries=3, base_delay=1.0, exceptions=(Exception,)):
         return wrapper
 
     return decorator
+
+
+# Helper: Retry chain invocations with network error handling
+
+
+def retry_chain_invoke(chain, inputs, max_retries=3, base_delay=2.0, context=""):
+    """Retry a LangChain chain invocation with exponential backoff
+
+    Handles network failures from Ollama/OpenAI providers
+
+    Args:
+        chain: The LangChain chain to invoke
+        inputs: Input dictionary for the chain
+        max_retries: Maximum number of retry attempts (default: 3)
+        base_delay: Initial delay in seconds (default: 2.0)
+        context: Description for logging (e.g., "script section")
+
+    Returns:
+        The chain's output
+
+    Raises:
+        Last exception if all retries fail
+    """
+    logger = logging.getLogger("retry_chain_invoke")
+
+    # Exceptions to catch and retry
+    retry_exceptions = (Exception,)  # Catch all by default
+    if NETWORK_EXCEPTIONS:
+        retry_exceptions = NETWORK_EXCEPTIONS + (ConnectionError, TimeoutError)
+
+    for attempt in range(max_retries):
+        try:
+            return chain.invoke(inputs)
+        except retry_exceptions as e:
+            if attempt == max_retries - 1:
+                logger.error(
+                    f"All {max_retries} retry attempts failed for {context}: {type(e).__name__}"
+                )
+                raise
+
+            delay = base_delay * (2**attempt)
+            error_msg = str(e)[:150]  # Truncate long error messages
+            logger.warning(
+                f"Attempt {attempt + 1}/{max_retries} failed for {context}: "
+                f"{type(e).__name__}: {error_msg}. Retrying in {delay}s..."
+            )
+            time.sleep(delay)
 
 
 # Safe json loading fx
@@ -836,9 +892,7 @@ def verify_facts_with_search(
 
     # Extract verifiable claims using LLM
     extract_prompt = ChatPromptTemplate.from_template(
-        """Analyze the following content and the most important 3 claims that can be checked via web search.
-        Focus on technical details, version numbers, command syntax, package names, repository names, and URLs.
-        Do not check specific code file names.
+        """Use web search to analyze the following content for correctness.
         
         Content: {content}
         
@@ -956,12 +1010,21 @@ def generate_outline_final(llm, outline_qa_report, outline_json):
 
 
 def summarize_script_section(llm: Union[ChatOpenAI, ChatOllama], section_script: str):
-    """Summarize a script section for context"""
+    """Summarize a script section for context with retry logic"""
     SUMMARIZE_PROMPT = ChatPromptTemplate.from_template(
         SUMMARIZE_SECTION_PROMPT_TEMPLATE_TEXT
     )
     summary_chain = SUMMARIZE_PROMPT | llm | StrOutputParser()
-    summary = summary_chain.invoke({"section_script": section_script})
+
+    # Use retry logic for network failures
+    summary = retry_chain_invoke(
+        summary_chain,
+        {"section_script": section_script},
+        max_retries=3,
+        base_delay=2.0,
+        context="section summary",
+    )
+
     logging.debug(f"Section Summary: {summary}")
     return summary
 
@@ -1014,7 +1077,10 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
             recent_script_content = "No preceding script."
 
         logging.debug(f"  → Invoking LLM for section: {section_name}")
-        section_script = script_chain.invoke(
+
+        # Use retry logic to handle network failures
+        section_script = retry_chain_invoke(
+            script_chain,
             {
                 "title": title,
                 "level": level,
@@ -1023,7 +1089,10 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
                 "recent_script_content": recent_script_content,
                 "section_name": section_name,
                 "section_content": section_content,
-            }
+            },
+            max_retries=5,  # More retries for long-running script generation
+            base_delay=3.0,  # Longer delay for network recovery
+            context=f"script section '{section_name}'",
         )
 
         script_length = len(section_script)
