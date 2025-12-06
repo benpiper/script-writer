@@ -885,15 +885,14 @@ Search Results: {search_results}
 Return ONLY valid JSON with this structure:
 {{
   "verified": true/false,
-  "confidence": "high/medium/low",
+  "confidence": "high/low",
   "reasoning": "brief explanation"
 }}
 
 Guidelines:
-- "verified": true only if results clearly support the claim
-- "verified": false if results contradict or don't mention the claim
+- "verified": true if results support or don't mention the claim
+- "verified": false only if results clearly contradict the claim
 - Use "high" confidence when results directly confirm/refute
-- Use "medium" for partial matches
 - Use "low" when results are ambiguous or insufficient
 """
                 )
