@@ -18,7 +18,7 @@ from functions import (
     write_markdown,
 )
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("script_writer")
 
 
@@ -124,7 +124,7 @@ class ScriptWriter:
                 script_md, sections_data = generate_video_script(
                     self.llm, outline_final_json
                 )
-            approval_status = ask_approval()
+            approval_status = True
         logger.info("Script generated.")
         logger.debug(script_md)
         return script_md, sections_data

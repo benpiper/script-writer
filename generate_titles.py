@@ -25,6 +25,12 @@ def parse_arguments():
     )
     parser.add_argument("--model", type=str, default="gpt-oss", help="LLM model to use")
     parser.add_argument(
+        "--delivery_type",
+        type=str,
+        default="lecture",
+        help="Delivery type (lecture, video, lab, etc.)",
+    )
+    parser.add_argument(
         "--save",
         type=str,
         default=None,
@@ -43,7 +49,9 @@ def main():
         # Import locally to avoid circular imports if any
         from functions import generate_video_idea_data, write_json
 
-        idea_data = generate_video_idea_data(llm, args.topic, args.domain, args.level)
+        idea_data = generate_video_idea_data(
+            llm, args.topic, args.domain, args.level, "lecture"
+        )
 
         print("=" * 40)
         print("GENERATED VIDEO IDEA")

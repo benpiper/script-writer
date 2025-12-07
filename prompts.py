@@ -24,6 +24,33 @@ IDEA_GENERATION_PROMPT_TEMPLATE_TEXT = """
         """
 
 
+IDEA_GENERATION_WITH_SEARCH_PROMPT_TEMPLATE_TEXT = """
+        Develop a comprehensive video idea based on the input and search context.
+        
+        Inputs:
+        - Topic: {topic}
+        - Domain: {domain}
+        - Audience level: {level}
+        
+        Search Context:
+        {search_context}
+
+        Output Guidelines:
+        1. **Titles**: Generate 5 distinct, SEO-optimized titles. Mix styles (How-to, Listicle, Contrarian, Problem/Solution).
+        2. **Hook**: Write a single, compelling hook sentence to grab attention immediately.
+        3. **Tools**: List 3-7 specific tools, libraries, or technologies that will be used or discussed. Use the search context to ensure these are accurate and up-to-date.
+        4. **Objectives**: List 3-5 clear learning objectives or takeaways for the viewer.
+        
+        Return ONLY a JSON object with the following structure:
+        {{
+            "titles": ["Title 1", "Title 2", ...],
+            "hook": "Your hook sentence",
+            "tools": ["Tool 1", "Tool 2", ...],
+            "objectives": ["Objective 1", "Objective 2", ...]
+        }}
+        """
+
+
 # --- Prompt: Ideation QA Prompt Template ---
 
 
@@ -40,7 +67,7 @@ OUTLINE_PROMPT_TEMPLATE = """
             "hook": "{hook}",
             "tools": {tools},
             "objectives": {objectives},
-
+            "delivery_type": "{delivery_type}",
         }}
 
         Guidelines:
@@ -72,6 +99,7 @@ OUTLINE_PROMPT_TEMPLATE = """
             {{
             "title": "{title}",
             "level": "{level}",
+            "delivery_type": "{delivery_type}"
         }}
             ],
             "sections": [
@@ -103,7 +131,8 @@ OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
     Analyze the input based on the following criteria:
 
     - Consistency: The outline should be internally consistent and free of contradictions.
-
+    - Completeness: The outline should clearly detail prerequisites, steps, and expected outcomes.
+    - Audience Fit: The outline should be appropriate for the intended audience level.
     - Decision: PASS or FAIL
 
     ## Output Format
@@ -114,6 +143,7 @@ OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
       "decision": "<pass or fail>",
       "reason": "<reason for the decision (string)",
       "consistency": <list of inconsistent or contradictory points>,
+      "completeness": <list of incomplete points>,
     }}
     
     **JSON Formatting Rules**:
@@ -131,6 +161,7 @@ OUTLINE_QA_PROMPT_TEMPLATE_TEXT = """
     - Hook: {hook}
     - Domain: {domain}
     - Objectives: {objectives}
+    - Audience level: {level}
     - Outline JSON:
       {outline}
 """
@@ -206,6 +237,11 @@ SCRIPT_SECTION_PROMPT_TEMPLATE_TEXT = """
         ## Context
         Title: {title}
         Audience Level: {level}
+        Delivery Type: {delivery_type}
+        
+        Guidelines based on Delivery Type:
+        - If 'Delivery Type' contains "lecture" or "no code", focus on concepts, theory, and high-level strategy. DOES NOT include code blocks or technical implementation details.
+        - If 'Delivery Type' contains "lab" or "demo", include practical steps, specific commands, and code examples.
         
         ## Full Outline
         {outline}
@@ -275,9 +311,10 @@ SCRIPT_QA_PROMPT_TEMPLATE_TEXT = """
     1. Completeness and Structure
        - Ensure no bullets or tables are used.
        - Ensure no incomplete sentences.
+       - Ensure terms are defined and explained
     
     2. Audience Fit
-       - Verify content matches the intended audience level.
+       - Ensure content matches the intended audience level.
        - Do not mention inclusivity.
 
     ## Output Format
@@ -303,18 +340,13 @@ You are analyzing whether web search is needed to create an accurate, up-to-date
 {video_idea_json}
 
 ## Decision Criteria
-Search is NEEDED if the topic involves:
-- Specific software versions, release dates, or features
-- Current best practices that may have changed
-- Recent tools, libraries, or technologies
-- Time-sensitive information
-- Technical specifications or API details
 
-Search is NOT NEEDED if the topic involves:
+Search is NOT NEEDED if the topic only involves:
 - General concepts (e.g., "what is a variable")
 - Fundamental programming principles
 - Timeless educational content
-- Topics you have sufficient knowledge about
+
+Search is NEEDED for anything else.
 
 ## Output Format
 Return ONLY a JSON object:
@@ -341,6 +373,7 @@ Input JSON structure:
     "hook": "{hook}",
     "tools": {tools},
     "objectives": {objectives},
+    "delivery_type": "{delivery_type}",
 }}
 
 ## Search Context (if available)
@@ -382,6 +415,7 @@ If any guideline is not fully met, correct the outline before producing your fin
     {{
     "title": "{title}",
     "level": "{level}",
+    "delivery_type": "{delivery_type}",
 }}
     ],
     "sections": [

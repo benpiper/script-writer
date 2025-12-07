@@ -34,6 +34,7 @@ from prompts import (
     SUMMARIZE_SECTION_PROMPT_TEMPLATE_TEXT,
     SEARCH_DECISION_PROMPT_TEXT,
     OUTLINE_WITH_SEARCH_PROMPT_TEXT,
+    IDEA_GENERATION_WITH_SEARCH_PROMPT_TEMPLATE_TEXT,
 )
 
 # Helper functions
@@ -151,10 +152,206 @@ def retry_with_backoff(max_retries=3, base_delay=1.0, exceptions=(Exception,)):
     return decorator
 
 
+# --- LangGraph-based Idea Generation ---
+
+
+class IdeaAgentState(TypedDict):
+    """State for the idea generation agent graph"""
+
+    topic: str
+    domain: str
+    level: str
+    delivery_type: str
+    needs_search: bool
+    search_queries: List[str]
+    search_results: str
+    idea_data: dict
+    error: Optional[str]
+
+
+def should_search_for_idea_node(
+    state: IdeaAgentState, llm: Union[ChatOpenAI, ChatOllama]
+) -> IdeaAgentState:
+    """Node: Decide if web search is needed for idea generation"""
+    logger = logging.getLogger("idea_agent.should_search")
+    logger.info("Analyzing if search is needed for idea generation...")
+
+    prompt = ChatPromptTemplate.from_template(SEARCH_DECISION_PROMPT_TEXT)
+    chain = prompt | llm | StrOutputParser()
+
+    # Construct a pseudo-idea dict for the prompt
+    idea_context = {
+        "topic": state["topic"],
+        "domain": state["domain"],
+        "level": state["level"],
+    }
+
+    try:
+        response = chain.invoke({"video_idea_json": json.dumps(idea_context, indent=2)})
+        decision = safe_json_loads(
+            response, context="search_decision", save_debug=False
+        )
+
+        if decision and "error" not in decision:
+            state["needs_search"] = decision.get("needs_search", False)
+            state["search_queries"] = decision.get("search_queries", [])
+            logger.info(
+                f"Decision: {'SEARCH' if state['needs_search'] else 'NO SEARCH'}"
+            )
+            if state["needs_search"]:
+                logger.info(f"Search queries: {state['search_queries']}")
+        else:
+            state["needs_search"] = False
+            state["search_queries"] = []
+
+    except Exception as e:
+        logger.error(f"Error in should_search_for_idea_node: {e}")
+        state["needs_search"] = False
+        state["search_queries"] = []
+
+    return state
+
+
+def generate_idea_node(
+    state: IdeaAgentState, llm: Union[ChatOpenAI, ChatOllama]
+) -> IdeaAgentState:
+    """Node: Generate the idea (with or without search context)"""
+    from prompts import IDEA_GENERATION_PROMPT_TEMPLATE_TEXT
+
+    logger = logging.getLogger("idea_agent.generate_idea")
+    logger.info("Generating idea...")
+
+    search_context = "No search performed."
+    if state.get("needs_search") and state.get("search_results"):
+        search_context = f"Search Results:\n{state['search_results']}"
+        prompt_text = IDEA_GENERATION_WITH_SEARCH_PROMPT_TEMPLATE_TEXT
+        input_vars = {
+            "topic": state["topic"],
+            "domain": state["domain"],
+            "level": state["level"],
+            "search_context": search_context,
+        }
+    else:
+        prompt_text = IDEA_GENERATION_PROMPT_TEMPLATE_TEXT
+        input_vars = {
+            "topic": state["topic"],
+            "domain": state["domain"],
+            "level": state["level"],
+        }
+
+    prompt = ChatPromptTemplate.from_template(prompt_text)
+    chain = prompt | llm | StrOutputParser()
+
+    try:
+        response = chain.invoke(input_vars)
+        idea_data = safe_json_loads(response, context="video_idea_generation")
+
+        if idea_data:
+            # Ensure inputs are included
+            idea_data["topic"] = state["topic"]
+            idea_data["domain"] = state["domain"]
+            idea_data["level"] = state["level"]
+            idea_data["delivery_type"] = state["delivery_type"]
+
+            # Set default title
+            if (
+                "titles" in idea_data
+                and isinstance(idea_data["titles"], list)
+                and len(idea_data["titles"]) > 0
+            ):
+                idea_data["title"] = idea_data["titles"][0]
+
+            state["idea_data"] = idea_data
+        else:
+            state["error"] = "Failed to parse generated idea"
+
+    except Exception as e:
+        logger.error(f"Error in generate_idea_node: {e}")
+        state["error"] = str(e)
+
+    return state
+
+
 def generate_video_idea_data(
-    llm: Union[ChatOpenAI, ChatOllama], topic: str, domain: str, level: str
+    llm: Union[ChatOpenAI, ChatOllama],
+    topic: str,
+    domain: str,
+    level: str,
+    delivery_type: str,
 ) -> Dict:
-    """Generate comprehensive video idea data"""
+    """Generate comprehensive video idea data using LangGraph"""
+    logger = logging.getLogger("generate_video_idea")
+
+    # 1. Initialize State Graph
+    workflow = StateGraph(IdeaAgentState)
+
+    # 2. Add Nodes
+    workflow.add_node(
+        "should_search", functools.partial(should_search_for_idea_node, llm=llm)
+    )
+    workflow.add_node("search", search_node)
+    workflow.add_node("generate_idea", functools.partial(generate_idea_node, llm=llm))
+
+    # 3. Add Edges
+    workflow.set_entry_point("should_search")
+
+    def search_condition(state: IdeaAgentState):
+        if state.get("needs_search"):
+            return "search"
+        return "generate_idea"
+
+    workflow.add_conditional_edges(
+        "should_search",
+        search_condition,
+        {"search": "search", "generate_idea": "generate_idea"},
+    )
+    workflow.add_edge("search", "generate_idea")
+    workflow.add_edge("generate_idea", END)
+
+    # 4. Compile Graph
+    app = workflow.compile()
+
+    # 5. Execute Graph
+    initial_state = {
+        "topic": topic,
+        "domain": domain,
+        "level": level,
+        "delivery_type": delivery_type,
+        "needs_search": False,
+        "search_queries": [],
+        "search_results": "",
+        "idea_data": {},
+        "error": None,
+    }
+
+    try:
+        final_state = app.invoke(initial_state)
+
+        if final_state.get("error"):
+            logger.error(f"Idea generation failed: {final_state['error']}")
+            raise ValueError(final_state["error"])
+
+        idea_data = final_state.get("idea_data")
+        if not idea_data:
+            raise ValueError("No idea data generated")
+
+        return idea_data
+
+    except Exception as e:
+        logger.error(f"Agent execution failed: {e}")
+        # Fallback to simple generation if agent fails
+        logger.info("Falling back to simple generation...")
+        return generate_video_idea_data_simple(llm, topic, domain, level, delivery_type)
+
+
+def generate_video_idea_data_simple(
+    llm: Union[ChatOpenAI, ChatOllama],
+    topic: str,
+    domain: str,
+    level: str,
+    delivery_type: str,
+) -> Dict:
+    """Fallback: Generate video idea without search (original implementation)"""
     from prompts import IDEA_GENERATION_PROMPT_TEMPLATE_TEXT
 
     input_json = {"topic": topic, "domain": domain, "level": level}
@@ -176,6 +373,7 @@ def generate_video_idea_data(
     idea_data["topic"] = topic
     idea_data["domain"] = domain
     idea_data["level"] = level
+    idea_data["delivery_type"] = delivery_type
 
     # Set a default title (the first suggested one) if available
     if (
@@ -246,7 +444,7 @@ def safe_json_loads(text, context="", save_debug=True):
         context: Description of what this JSON is for (for debug logging)
         save_debug: Whether to save failed JSON to debug file
     """
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("safe_json_loader")
 
     # Log the raw response with context
@@ -1018,9 +1216,11 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
     # Extract title and level from meta if available
     title = ""
     level = ""
+    delivery_type = ""
     if "meta" in outline and len(outline["meta"]) > 0:
         title = outline["meta"][0].get("title", "")
         level = outline["meta"][0].get("level", "")
+        delivery_type = outline["meta"][0].get("delivery_type", "")
 
     # Iterate through sections, accumulating script
     running_summary = "No previous content."
@@ -1063,6 +1263,7 @@ def generate_video_script(llm: Union[ChatOpenAI, ChatOllama], outline: Dict):
                 "recent_script_content": recent_script_content,
                 "section_name": section_name,
                 "section_content": section_content,
+                "delivery_type": delivery_type,
             },
             max_retries=5,  # More retries for long-running script generation
             base_delay=3.0,  # Longer delay for network recovery
