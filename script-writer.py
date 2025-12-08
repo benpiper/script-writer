@@ -18,7 +18,7 @@ from functions import (
     write_markdown,
 )
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("script_writer")
 
 
