@@ -1,0 +1,25 @@
+{
+  "title": "Fine-Tuning GPT-OSS on Your GPU Beats Renting GPU Hours",
+  "topic": "How to fine tune OpenAI's gpt-oss-20b model with your own text files on an NVIDIA 12GB GPU with CUDA already installed",
+  "domain": "information technology",
+  "level": "beginner",
+  "hook": "Unleash your data on GPT-OSS using just a 12GB NVIDIA card!",
+  "tools": [
+    "Python",
+    "PyTorch",
+    "CUDA",
+    "NVIDIA GPU",
+    "OpenAI's gpt-oss-20b repository",
+    "Datasets library",
+    "tokenizers",
+    "huggingface"
+  ],
+  "objectives": [
+    "fine tune gpt-oss-20b on a single NVIDIA GPU",
+    "Prepare text dataset",
+    "Tokenize and format data",
+    "Configure training parameters",
+    "Evaluate model performance",
+    "locally deploy fine-tuned model"
+  ]
+}
