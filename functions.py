@@ -869,12 +869,23 @@ def generate_outline_node(
 
     try:
         video_idea = state["video_idea"]
-        response = chain.invoke(
-            {
-                "search_context": search_context,
-                **video_idea,  # Unpack video_idea fields
-            }
-        )
+
+        # Normalize title if titles array exists
+        if "titles" in video_idea and isinstance(video_idea["titles"], list) and "title" not in video_idea:
+            video_idea = video_idea.copy()  # Make copy if modifying
+            video_idea["title"] = video_idea["titles"][0]
+            del video_idea["titles"]
+
+        # Prepare only the expected fields for the prompt
+        expected_keys = ["title", "domain", "level", "hook", "tools", "objectives", "delivery_type"]
+        data = {"search_context": search_context}
+        for key in expected_keys:
+            if key in video_idea:
+                data[key] = video_idea[key]
+            elif key == "delivery_type":
+                data[key] = "lecture"  # Default delivery type
+
+        response = chain.invoke(data)
 
         outline = safe_json_loads(response, context="video_outline_langgraph")
         outline = validate_and_clean_outline(outline)
